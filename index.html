@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WoW Macro 101 — build a macro, see what it actually does</title>
+    <meta
+      name="description"
+      content="A live explainer for World of Warcraft macros. Type a macro and see, token by token, exactly what the game will do with it."
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>WoW Macro&nbsp;101</h1>
+        <p>Type a macro. See what it actually does.</p>
+      </div>
+      <div class="topbar-controls">
+        <label class="field">
+          <span>Game version</span>
+          <select id="flavour"></select>
+        </label>
+        <label class="field">
+          <span>Examples</span>
+          <select id="examples"></select>
+        </label>
+      </div>
+    </header>
+
+    <p class="flavour-note" id="flavour-note" hidden></p>
+
+    <main class="layout">
+      <section class="col col-main">
+        <section class="card editor-card">
+          <div class="card-head">
+            <h2>Macro</h2>
+            <div class="card-actions">
+              <span class="meter" id="meter"></span>
+              <button type="button" id="copy">Copy</button>
+              <button type="button" id="share">Copy link</button>
+              <button type="button" id="clear">Clear</button>
+            </div>
+          </div>
+          <div class="editor">
+            <div class="gutter" id="gutter" aria-hidden="true"></div>
+            <div class="editor-body">
+              <pre class="highlight" id="highlight" aria-hidden="true"></pre>
+              <textarea
+                id="input"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                aria-label="Macro text"
+                placeholder="#showtooltip&#10;/cast [mod:shift,@focus][] Counterspell"
+              ></textarea>
+            </div>
+          </div>
+          <div class="meter-bar"><div class="meter-fill" id="meter-fill"></div></div>
+        </section>
+
+        <section class="card" id="issues-card">
+          <div class="card-head"><h2>Issues</h2></div>
+          <div id="issues"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Situation</h2>
+            <div class="card-actions">
+              <button type="button" id="sim-reset">Reset</button>
+            </div>
+          </div>
+          <p class="card-hint">
+            Set the situation and the explanation marks which clause actually runs.
+            Anything the toggles cannot describe is reported as <em>might run</em>
+            rather than guessed at.
+          </p>
+          <div id="sim"></div>
+        </section>
+      </section>
+
+      <aside class="col col-side">
+        <section class="card">
+          <div class="card-head"><h2>Explanation</h2></div>
+          <div id="explanation"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>Reference</h2></div>
+          <div class="ref-tabs" id="ref-tabs"></div>
+          <input type="search" id="ref-search" placeholder="Search commands and conditions…" />
+          <div id="reference"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
