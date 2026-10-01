@@ -523,8 +523,11 @@ function validateCondition(ctx: Ctx, line: Line, cond: Condition): void {
       span, line.number, { nodeId: cond.id });
   }
   if (def.value === 'required' && !cond.values.length) {
-    ctx.issue('warning', `[${def.name}] needs a value, e.g. ${def.values?.length ? `[${def.name}:${def.values[0]}]` : `[${def.name}:...]`}.`,
-      span, line.number, { nodeId: cond.id });
+    const example = def.values?.length ? `[${def.name}:${def.values[0]}]` : `[${def.name}:...]`;
+    ctx.issue(
+      'warning', `[${def.name}] needs a value, e.g. ${example}.`,
+      span, line.number, { nodeId: cond.id },
+    );
   }
   if (def.strictValues && def.values) {
     const known = new Set(def.values.map((v) => v.toLowerCase()));

@@ -257,7 +257,10 @@ function summarise(ast: MacroAst): string {
 
   const errorCount = ast.issues.filter((i) => i.severity === 'error').length;
   if (errorCount) {
-    parts.push(`${errorCount} problem${errorCount === 1 ? '' : 's'} need${errorCount === 1 ? 's' : ''} fixing before this will work.`);
+    const plural = errorCount === 1 ? '' : 's';
+    parts.push(
+      `${errorCount} problem${plural} need${errorCount === 1 ? 's' : ''} fixing before this will work.`,
+    );
   }
   if (flavour.provisional) {
     parts.push(`${flavour.shortLabel} rules are provisional.`);
