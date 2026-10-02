@@ -83,13 +83,20 @@ export function explainMacro(ast: MacroAst, options: ExplainOptions = {}): Expla
   return { summary: summarise(ast, options), rows };
 }
 
-/** The spell a row names, when the command actually takes a spell name. */
-function spellFor(line: Line, text: string, options: ExplainOptions): SpellRecord | undefined {
+/**
+ * The spell a row names, when the command actually takes a spell name.
+ *
+ * `rank` carries `/cast Fireball(Rank 3)` through: on the Classic lines each rank is a
+ * separate spell id, so it decides which icon and which Wowhead tooltip the chip gets.
+ */
+function spellFor(
+  line: Line, text: string, options: ExplainOptions, rank?: number,
+): SpellRecord | undefined {
   if (!options.spells || !text) return undefined;
   const command = line.command?.name.toLowerCase();
   const takesSpell = line.kind === 'meta' || (command !== undefined && SPELL_NAME_COMMANDS.has(command));
   if (!takesSpell) return undefined;
-  return options.spells.lookup(text) ?? undefined;
+  return options.spells.lookup(text, rank) ?? undefined;
 }
 
 function explainLine(ast: MacroAst, line: Line, options: ExplainOptions): ExplRow | null {
@@ -212,14 +219,14 @@ function explainClause(
         `${clause.id}-step${i}`, 'step', s.rank ? `${s.text} (rank ${s.rank})` : s.text,
         `Step ${i + 1} of ${seq.spells.length}.${rank} `
         + 'Only a successful cast advances the sequence.',
-        [], undefined, spellFor(line, s.text, options),
+        [], undefined, spellFor(line, s.text, options, s.rank),
       ));
     });
   }
 
   return row(
     clause.id, 'clause', chip, text, children, undefined,
-    clause.arg ? spellFor(line, clause.arg.text, options) : undefined,
+    clause.arg ? spellFor(line, clause.arg.text, options, clause.arg.rank) : undefined,
   );
 }
 

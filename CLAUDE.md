@@ -79,6 +79,13 @@ The same principle governs severity: unrecognised spell names are **info**, flav
 mismatches are **warnings**, and only genuine syntax faults are **errors**. A spell
 missing from the dataset must never be an error — the data always lags a patch.
 
+Unranked resolution is the one place we answer a question the data cannot: `/cast Fireball`
+with no rank casts *the highest rank you know*, and we do not model level, so
+`SpellIndex.lookup` falls back to the highest rank present. That is the right answer for a
+trained character, which is what people write macros for. Asking for a rank that does not
+exist also falls back — `checkSpellRank` in the parser decides whether to say so, at info
+level, and says nothing at all when the spell has no rank data.
+
 **4. Flavours are data, not branches.** `src/flavours.ts` defines `retail` (Midnight),
 `forever` and `era`. Conditionals and commands carry
 `availability: { [flavour]: 'yes' | 'no' | 'unknown' }`; parser behaviour differences go
@@ -104,7 +111,7 @@ index is worse than an unlabelled one.
 
 `scripts/build-spell-data.mjs` joins wago.tools DB2 CSV exports into a committed JSON per
 flavour. Output columns: `name, id, iconIndex, castMs, rangeYd, cooldownMs, gcdMs,
-ambiguous, classMask`.
+ambiguous, classMask, rank`. **One row per `(name, rank)`**, not per name.
 
 Hard-won details:
 
@@ -121,6 +128,23 @@ Hard-won details:
   to ~23%, which is correct — the rest are professions, mounts and quest items.
 - **Read-time normalisation** in `createSpellIndex` masks class bits to the flavour's known
   classes and treats an "every class" mask as no class at all.
+- **Ranks come from `Spell.NameSubtext_lang`, and only `Rank N` counts.** That column also
+  holds `Racial Passive`, `Summon`, `Shapeshift`, form names (`Cat`, `Bear`, `Turtle`) and
+  the profession tiers `Apprentice`/`Journeyman`/`Expert`/`Artisan` — 139 of them on
+  Classic Era alone. None are addressable from a macro, so a strict `/^Rank (\d+)$/` is
+  the filter and everything else maps to rank 0. Read it through `readCsv`: this table's
+  `Description_lang` has embedded newlines, the same hazard as `ChrSpecialization`.
+- **The rank column is Classic-only, by choice rather than by data.** Retail's `Spell`
+  table still carries 5783 non-empty subtexts, all leftovers from before ranks were
+  removed; keying on them would split names that resolve fine today. `RANK_FLAVOURS` in
+  the generator mirrors `features.spellRanks`, duplicated because the script is plain
+  `.mjs`. Skipping it also avoids a 23 MB download retail has no use for.
+- **Rank splitting *reduces* ambiguity.** After the `wanted` filter, Fireball has 12 ids
+  for 12 ranks with no collisions; only ~8% of `(name, rank)` pairs still collide, and
+  those keep the "prefer learned, else lowest id" tiebreak.
+- **`spells.retail.json` is deliberately not regenerated for the rank column.**
+  `createSpellIndex` reads it as `row[9] ?? 0`, the same tolerance already applied to
+  `classMask`.
 
 ## Icons
 
@@ -135,6 +159,39 @@ URLs, so switching to self-hosting or a proxy is a one-line change.
   icons simply never appear.
 - Always give explicit `width`/`height` and an `onerror` that hides the image. Graceful
   degradation is a requirement: the CDN offers no uptime guarantee for this use.
+
+## Tooltips
+
+Spell tooltips are Wowhead's, not ours. The in-game descriptions in `Spell.db2` are
+templates (`"Deals $s1 Frost damage"`) resolved at runtime from effect values and caster
+stats we do not have, so rendering them ourselves would mean inventing numbers. Wowhead
+resolves them properly, and their embed does it for any link we emit. The script is
+hotlinked, never vendored, on the same terms as the icons: one `SCRIPT_URL` constant in
+`src/ui/wowhead.ts`.
+
+Four things, all read out of the minified script rather than its docs page (which answers
+403 to anything that is not a browser — the plain-text docs are unreachable by `curl`):
+
+- **The trigger must be an `<a>` or `<area>`.** `data-wowhead` on a `<span>` or `<code>`
+  is ignored outright. That is the whole reason a spell chip is an anchor rather than the
+  `<code>` every other chip is.
+- **One `mouseover` handler is bound on `document`.** Links rendered afterwards are picked
+  up for free, so `update()` can re-render the explanation on every keystroke without
+  calling `$WowheadPower.refreshLinks()`. That function exists only to re-apply the
+  rename/colour/iconize decoration, which is why all three are turned off in `whTooltips`
+  — we want our own icon, our own `--tok-*` colours, and the macro token verbatim.
+- **The game version comes from the href's path prefix**, so a correct URL from
+  `wowheadUrl` is the entire integration. The mapping is flavour data (`wowheadPath` in
+  `src/flavours.ts`): Midnight has no prefix, Forever is `/forever/` and Classic Era is
+  `/classic/`. Wowhead's own enum calls Forever `CLASSICPLUS` and maps it to `"forever"` —
+  do not guess a new flavour's segment, read it out of the script.
+- **Load it lazily.** `ensureWowheadTooltips()` is called only once a render has produced
+  a spell chip, so an empty editor never contacts Wowhead. The footer discloses this; keep
+  the two in step.
+
+Losing Wowhead degrades to a chip with no tooltip, which is still a working link — there
+is deliberately no fallback popover. The one casualty is `SpellRecord.ambiguous`, which no
+longer has any UI surface.
 
 ## UI gotchas
 

@@ -452,7 +452,7 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
 .kind-outcome > .expl-head { background: color-mix(in srgb, var(--ok) 8%, transparent); }
 .kind-outcome > .expl-head .expl-text { color: var(--ok); }
 
-/* --- Spell icons, tooltip and condition markers --------------------------- */
+/* --- Spell icons, chip links and condition markers ------------------------ */
 
 .spell-icon {
   vertical-align: -4px;
@@ -461,7 +461,13 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
   border: 1px solid var(--border);
 }
 
-.chip-spell { cursor: help; }
+/*
+ * A spell chip is an <a> to Wowhead, which also carries their live tooltip. No
+ * underline and no :visited colour -- it has to keep reading as a chip, and the
+ * .kind-* rules above own its colour. Those win on specificity, and author rules
+ * beat the UA :visited style regardless.
+ */
+.chip-spell { cursor: pointer; text-decoration: none; }
 .chip-spell:hover,
 .chip-spell:focus-visible { border-color: var(--accent); color: var(--text); }
 
@@ -476,42 +482,6 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
 .mark-fail { color: var(--error); }
 .mark-unsure { color: var(--warning); }
 
-.spell-tip {
-  position: absolute;
-  z-index: 40;
-  max-width: 260px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--bg-raised);
-  color: var(--text);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.spell-tip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.spell-tip-icon { border-radius: 4px; border: 1px solid var(--border); }
-
-/* One pair per row: two columns cramped "No cooldown" onto two lines. */
-.spell-tip-facts { display: grid; gap: 1px; margin: 0; }
-.spell-tip-facts div { display: flex; justify-content: space-between; gap: 16px; }
-.spell-tip-facts dt { color: var(--text-dim); }
-.spell-tip-facts dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-.spell-tip-note {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--warning);
-}
-
-.spell-tip-link {
-  display: inline-block;
-  margin-top: 8px;
-  color: var(--accent);
-  font-size: 12px;
-}
-
 .site-foot {
   margin: 0;
   padding: 16px 24px 32px;
@@ -523,21 +493,6 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
 
 /* Classic spell ranks: /cast Fireball(Rank 3) */
 .t-rank { color: var(--tok-meta); }
-
-/* The popover is interactive — it must accept the pointer, not just show facts. */
-.spell-tip-link:hover,
-.spell-tip-link:focus-visible { text-decoration: underline; }
-.spell-tip-hint {
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-.spell-tip-class {
-  margin: 1px 0 0;
-  font-size: 12px;
-  color: var(--tok-cond);
-}
 
 /* --- Class picker --------------------------------------------------------- */
 

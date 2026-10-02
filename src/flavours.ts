@@ -27,6 +27,15 @@ export interface Flavour {
   /** Shown under the header whenever present, provisional or not. */
   note?: string;
   features: FlavourFeatures;
+  /**
+   * Wowhead's own path segment for this game version; '' for the mainline site.
+   *
+   * Read out of the env-to-path map inside Wowhead's embed script rather than guessed:
+   * dataEnv.CLASSICPLUS (which is what they call WoW: Forever) maps to "forever" and
+   * dataEnv.CLASSIC to "classic". Wowhead resolves the game version from this path
+   * prefix alone, so a correct href is all their tooltip needs.
+   */
+  wowheadPath: string;
 }
 
 export const FLAVOURS: Record<FlavourId, Flavour> = {
@@ -39,6 +48,7 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
     interfaceVersion: 120100,
     provisional: false,
     features: { spellRanks: false },
+    wowheadPath: '',
   },
   forever: {
     id: 'forever',
@@ -50,6 +60,7 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
       'Forever launches 4 Nov 2026. Spell data here comes from a pre-launch build and '
       + 'will change — treat flavour-specific notes as provisional.',
     features: { spellRanks: true },
+    wowheadPath: 'forever',
   },
   era: {
     id: 'era',
@@ -63,6 +74,7 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
       'A few conditionals could not be confirmed against a reliable source and are '
       + 'marked unverified rather than guessed at.',
     features: { spellRanks: true },
+    wowheadPath: 'classic',
   },
 };
 

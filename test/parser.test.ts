@@ -283,6 +283,7 @@ describe('soft spell validation', () => {
     count: 2,
     has: (name: string) => ['fireball', 'steady shot'].includes(name.trim().toLowerCase()),
     lookup: () => null,
+    ranksFor: () => [],
   };
 
   it('stays silent with no dataset loaded', () => {
@@ -352,6 +353,7 @@ describe('spell ranks', () => {
       build: 'test', count: 1,
       has: (name: string) => name.trim().toLowerCase() === 'fireball',
       lookup: () => null,
+      ranksFor: () => [],
     };
     expect(infos(parseMacro('/cast Fireball(Rank 3)', 'era', { spells: index }))).toHaveLength(0);
     expect(infos(parseMacro('/cast Firebal(Rank 3)', 'era', { spells: index }))[0].message)
@@ -425,7 +427,7 @@ describe('class mismatch warnings', () => {
     has: (name: string) => ['consecration', 'mortal strike', 'mining'].includes(name.trim().toLowerCase()),
     lookup: (name: string) => {
       const key = name.trim().toLowerCase();
-      const base = { icon: null, castMs: 0, rangeYd: 0, cooldownMs: 0, gcdMs: 0, ambiguous: false };
+      const base = { icon: null, castMs: 0, rangeYd: 0, cooldownMs: 0, gcdMs: 0, ambiguous: false, rank: 0 };
       if (key === 'consecration') {
         return { ...base, name: 'Consecration', id: 26573, classMask: 0b10, classes: ['Paladin'] };
       }
@@ -437,6 +439,7 @@ describe('class mismatch warnings', () => {
       }
       return null;
     },
+    ranksFor: () => [],
   };
 
   it('warns when the spell belongs to another class', () => {
@@ -485,7 +488,7 @@ describe('class mismatch warnings', () => {
       has: () => true,
       lookup: () => ({
         name: 'Disintegrate', id: 356995, icon: null, castMs: 0, rangeYd: 0,
-        cooldownMs: 0, gcdMs: 0, ambiguous: false, classMask: 1 << 12, classes: ['Evoker'],
+        cooldownMs: 0, gcdMs: 0, ambiguous: false, rank: 0, classMask: 1 << 12, classes: ['Evoker'],
       }),
     };
     expect(parseMacro('/cast Disintegrate', 'retail', { spells: evoker, classId: WARRIOR }).issues[0].message)
@@ -508,6 +511,43 @@ describe('spell ranks on both Classic lines', () => {
     expect(parseMacro('/cast Fireball(Rank 3)', 'forever').issues).toHaveLength(0);
     expect(parseMacro('/cast Fireball(Rank 3)', 'era').issues).toHaveLength(0);
     expect(parseMacro('/cast Fireball(Rank 3)', 'retail').issues).toHaveLength(1);
+  });
+
+  describe('a rank the spell does not have', () => {
+    // Fireball has 12 ranks; Counterspell has none; Thunderfury is not in the dataset.
+    const spells = {
+      build: 'test',
+      count: 2,
+      has: (name: string) => ['fireball', 'counterspell'].includes(name.trim().toLowerCase()),
+      lookup: () => null,
+      ranksFor: (name: string) =>
+        (name.trim().toLowerCase() === 'fireball' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : []),
+    };
+
+    it('is reported at info level, never louder', () => {
+      const ast = parseMacro('/cast Fireball(Rank 99)', 'era', { spells });
+      expect(ast.issues).toHaveLength(1);
+      expect(ast.issues[0].severity).toBe('info');
+      expect(ast.issues[0].message)
+        .toBe('Fireball has ranks 1 to 12 on Classic Era, so "(Rank 99)" will not match (build test).');
+    });
+
+    it('stays silent for a rank that exists', () => {
+      expect(parseMacro('/cast Fireball(Rank 3)', 'era', { spells }).issues).toHaveLength(0);
+      expect(parseMacro('/cast Fireball(Rank 12)', 'era', { spells }).issues).toHaveLength(0);
+    });
+
+    // An unknown must never be reported as a falsehood: no rank data means no opinion.
+    it('stays silent when we have no ranks for the spell at all', () => {
+      expect(parseMacro('/cast Counterspell(Rank 2)', 'era', { spells }).issues).toHaveLength(0);
+      expect(parseMacro('/cast Thunderfury(Rank 2)', 'era', { spells }).issues
+        .filter((i) => /will not match/.test(i.message))).toHaveLength(0);
+    });
+
+    it('checks each step of a castsequence', () => {
+      const ast = parseMacro('/castsequence Fireball(Rank 2), Fireball(Rank 99)', 'era', { spells });
+      expect(ast.issues.filter((i) => /will not match/.test(i.message))).toHaveLength(1);
+    });
   });
 });
 

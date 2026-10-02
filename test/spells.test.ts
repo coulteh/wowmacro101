@@ -5,9 +5,9 @@ import spellData from '../src/data/spells.retail.json';
 import eraData from '../src/data/spells.era.json';
 import foreverData from '../src/data/spells.forever.json';
 import {
-  belongsToClass, createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl,
-  wowheadUrl, ICON_BASE, type SpellData,
+  belongsToClass, createSpellIndex, iconUrl, wowheadUrl, ICON_BASE, type SpellData,
 } from '../src/data/spells';
+import { FLAVOUR_IDS } from '../src/flavours';
 import { EXAMPLES } from '../src/data/examples';
 import { ANY_CLASS, classesFor, WOW_CLASSES } from '../src/data/classes';
 import { parseMacro } from '../src/parser/parser';
@@ -119,20 +119,20 @@ describe('icon and link helpers', () => {
     expect(iconUrl('spell_fire_flamebolt')).toContain('/56/');
   });
 
-  it('links to Wowhead by spell id', () => {
-    expect(wowheadUrl(133)).toBe('https://www.wowhead.com/spell=133');
+  // The path prefix is what tells Wowhead which game version to show, both on the page
+  // and in the tooltip their embed renders, so these three strings are load-bearing.
+  it('links to Wowhead on the right game version', () => {
+    expect(wowheadUrl(133, 'retail')).toBe('https://www.wowhead.com/spell=133');
+    expect(wowheadUrl(133, 'forever')).toBe('https://www.wowhead.com/forever/spell=133');
+    expect(wowheadUrl(133, 'era')).toBe('https://www.wowhead.com/classic/spell=133');
   });
 
-  it('formats facts the way a tooltip should read', () => {
-    expect(formatCastTime(0)).toBe('Instant');
-    expect(formatCastTime(1500)).toBe('1.5 sec cast');
-    expect(formatCastTime(2000)).toBe('2 sec cast');
-    expect(formatCastTime(1750)).toBe('1.75 sec cast');
-    expect(formatRange(0)).toBe('Self');
-    expect(formatRange(40)).toBe('40 yd range');
-    expect(formatCooldown(0)).toBe('No cooldown');
-    expect(formatCooldown(25_000)).toBe('25 sec cooldown');
-    expect(formatCooldown(120_000)).toBe('2 min cooldown');
+  // A new flavour must not silently inherit Midnight's path: every id would then point
+  // at a different spell. Adding one means deciding its wowheadPath.
+  it('gives every flavour a distinct Wowhead path', () => {
+    const urls = FLAVOUR_IDS.map((flavour) => wowheadUrl(133, flavour));
+    for (const url of urls) expect(url).toMatch(/^https:\/\/www\.wowhead\.com\/[\w/]*spell=133$/);
+    expect(new Set(urls).size).toBe(FLAVOUR_IDS.length);
   });
 });
 
@@ -149,10 +149,13 @@ describe('every flavour dataset', () => {
   it.each(ALL)('%s resolves the vanilla core every version shares', (_flavour, _raw, idx) => {
     // Real ids, verified against each build. Mortal Strike is 12294 everywhere -- the
     // 9347 in the raw SpellName table is a non-player variant.
-    expect(idx.lookup('Fireball')!.id).toBe(133);
-    expect(idx.lookup('Mortal Strike')!.id).toBe(12294);
-    expect(idx.lookup('Flash Heal')!.id).toBe(2061);
-    expect(idx.lookup('Counterspell')!.id).toBe(2139);
+    //
+    // Asked for rank 1 so one assertion covers all three: the Classic lines hit the rank
+    // explicitly, and Midnight has no ranks at all so it falls back to its single record.
+    expect(idx.lookup('Fireball', 1)!.id).toBe(133);
+    expect(idx.lookup('Mortal Strike', 1)!.id).toBe(12294);
+    expect(idx.lookup('Flash Heal', 1)!.id).toBe(2061);
+    expect(idx.lookup('Counterspell', 1)!.id).toBe(2139);
   });
 
   it('draws from genuinely different builds, not one source relabelled', () => {
@@ -167,13 +170,41 @@ describe('every flavour dataset', () => {
     expect(forever.has('Steady Shot')).toBe(false);
   });
 
-  it('shows more ambiguity on the rank-bearing versions', () => {
-    // Ranks share a spell name, so Classic-line datasets collapse many ids per name.
+  // `/cast Fireball(Rank 3)` addresses one specific spell id in game, so the dataset
+  // carries a row per (name, rank) rather than collapsing twelve Fireballs into one.
+  it.each([['era', era], ['forever', forever]] as const)('%s keys spells by rank', (_f, idx) => {
+    expect(idx.ranksFor('Fireball')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(idx.lookup('Fireball', 3)!.id).toBe(145);
+    expect(idx.lookup('Fireball', 12)!.id).toBe(25306);
+
+    // No rank given means the highest rank you know, so we answer with the highest we
+    // have. Picking the lowest id -- which is what name-only keying did -- made every
+    // Classic macro resolve to Rank 1.
+    expect(idx.lookup('Fireball')!.rank).toBe(12);
+    expect(idx.lookup('Fireball')!.id).toBe(25306);
+
+    // A rank the spell does not have falls back rather than failing; the parser is what
+    // decides whether that deserves an issue.
+    expect(idx.lookup('Fireball', 99)!.id).toBe(25306);
+
+    // Unranked spells are untouched: Counterspell has a single rank-less row.
+    expect(idx.ranksFor('Counterspell')).toEqual([]);
+    expect(idx.lookup('Counterspell', 3)!.id).toBe(2139);
+  });
+
+  it('leaves Midnight rankless, where ranks do not exist', () => {
+    expect(index.ranksFor('Fireball')).toEqual([]);
+    expect(index.lookup('Fireball')!.rank).toBe(0);
+    // A rank argument is simply ignored rather than failing to match.
+    expect(index.lookup('Fireball', 3)!.id).toBe(133);
+  });
+
+  it('splitting by rank reduced ambiguity rather than adding to it', () => {
+    // Same-named ids used to pile up under one key; most of that pile was just ranks.
     const rate = (raw: SpellData) =>
       raw.spells.filter((row) => row[7] === 1).length / raw.spells.length;
-    expect(rate(eraData as unknown as SpellData))
-      .toBeGreaterThan(rate(data));
-    expect(era.lookup('Fireball')!.ambiguous).toBe(true);
+    expect(rate(foreverData as unknown as SpellData)).toBeLessThan(rate(data));
+    expect(era.lookup('Fireball', 3)!.ambiguous).toBe(false);
   });
 
   it('keeps each dataset small enough to be a lazy chunk', () => {
