@@ -5,9 +5,9 @@ import spellData from '../src/data/spells.retail.json';
 import eraData from '../src/data/spells.era.json';
 import foreverData from '../src/data/spells.forever.json';
 import {
-  belongsToClass, createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl,
-  wowheadUrl, ICON_BASE, type SpellData,
+  belongsToClass, createSpellIndex, iconUrl, wowheadUrl, ICON_BASE, type SpellData,
 } from '../src/data/spells';
+import { FLAVOUR_IDS } from '../src/flavours';
 import { EXAMPLES } from '../src/data/examples';
 import { ANY_CLASS, classesFor, WOW_CLASSES } from '../src/data/classes';
 import { parseMacro } from '../src/parser/parser';
@@ -119,20 +119,20 @@ describe('icon and link helpers', () => {
     expect(iconUrl('spell_fire_flamebolt')).toContain('/56/');
   });
 
-  it('links to Wowhead by spell id', () => {
-    expect(wowheadUrl(133)).toBe('https://www.wowhead.com/spell=133');
+  // The path prefix is what tells Wowhead which game version to show, both on the page
+  // and in the tooltip their embed renders, so these three strings are load-bearing.
+  it('links to Wowhead on the right game version', () => {
+    expect(wowheadUrl(133, 'retail')).toBe('https://www.wowhead.com/spell=133');
+    expect(wowheadUrl(133, 'forever')).toBe('https://www.wowhead.com/forever/spell=133');
+    expect(wowheadUrl(133, 'era')).toBe('https://www.wowhead.com/classic/spell=133');
   });
 
-  it('formats facts the way a tooltip should read', () => {
-    expect(formatCastTime(0)).toBe('Instant');
-    expect(formatCastTime(1500)).toBe('1.5 sec cast');
-    expect(formatCastTime(2000)).toBe('2 sec cast');
-    expect(formatCastTime(1750)).toBe('1.75 sec cast');
-    expect(formatRange(0)).toBe('Self');
-    expect(formatRange(40)).toBe('40 yd range');
-    expect(formatCooldown(0)).toBe('No cooldown');
-    expect(formatCooldown(25_000)).toBe('25 sec cooldown');
-    expect(formatCooldown(120_000)).toBe('2 min cooldown');
+  // A new flavour must not silently inherit Midnight's path: every id would then point
+  // at a different spell. Adding one means deciding its wowheadPath.
+  it('gives every flavour a distinct Wowhead path', () => {
+    const urls = FLAVOUR_IDS.map((flavour) => wowheadUrl(133, flavour));
+    for (const url of urls) expect(url).toMatch(/^https:\/\/www\.wowhead\.com\/[\w/]*spell=133$/);
+    expect(new Set(urls).size).toBe(FLAVOUR_IDS.length);
   });
 });
 

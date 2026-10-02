@@ -5,7 +5,7 @@
 // has is worse than saying nothing at all.
 
 import { classBit, classNames, maskHasClass, ANY_CLASS, CLASSES_BY_FLAVOUR } from './classes';
-import type { FlavourId } from '../flavours';
+import { FLAVOURS, type FlavourId } from '../flavours';
 
 /**
  * Icons are hotlinked from Blizzard's own CDN rather than copied into this repo: we
@@ -24,8 +24,17 @@ export function iconUrl(icon: string, size: IconSize = 56): string {
   return `${ICON_BASE}/${size}/${icon}.jpg`;
 }
 
-export function wowheadUrl(id: number): string {
-  return `https://www.wowhead.com/spell=${id}`;
+/**
+ * Wowhead's page for a spell, on the right game version.
+ *
+ * The flavour is deliberately not optional: an unflavoured link is the bug this exists
+ * to prevent -- Classic ids resolve to entirely different spells on the mainline site.
+ * It is also what powers the live tooltip, which Wowhead resolves from this path alone
+ * (see `ensureWowheadTooltips` in src/ui/wowhead.ts).
+ */
+export function wowheadUrl(id: number, flavour: FlavourId): string {
+  const path = FLAVOURS[flavour].wowheadPath;
+  return `https://www.wowhead.com/${path ? `${path}/` : ''}spell=${id}`;
 }
 
 /**
@@ -136,30 +145,6 @@ export async function loadSpellIndex(flavour: FlavourId): Promise<SpellIndex | n
     return null;
   }
 }
-
-// --- Formatting helpers, shared by the tooltip ------------------------------
-
-/** 1.75 stays 1.75, 1.50 becomes 1.5, 2.00 becomes 2. */
-function trim(value: number): string {
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-export function formatCastTime(ms: number): string {
-  if (!ms) return 'Instant';
-  return `${trim(ms / 1000)} sec cast`;
-}
-
-export function formatRange(yards: number): string {
-  if (!yards) return 'Self';
-  return `${trim(yards)} yd range`;
-}
-
-export function formatCooldown(ms: number): string {
-  if (!ms) return 'No cooldown';
-  if (ms < 60_000) return `${trim(ms / 1000)} sec cooldown`;
-  return `${trim(ms / 60_000)} min cooldown`;
-}
-
 
 /**
  * Does this spell belong to the given class?

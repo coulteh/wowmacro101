@@ -1,5 +1,6 @@
 import type { Truth } from '../data/types';
-import { iconUrl } from '../data/spells';
+import { iconUrl, wowheadUrl } from '../data/spells';
+import type { FlavourId } from '../flavours';
 import type { ExplRow, Explanation } from '../explain/explain';
 import type { SimResult, Verdict } from '../sim/evaluate';
 import { escapeHtml } from './highlight';
@@ -15,13 +16,15 @@ const VERDICT_LABEL: Record<Verdict, string> = {
 export type Outcomes = Map<string, string>;
 
 export function renderExplanation(
-  explanation: Explanation, sim: SimResult | null, outcomes: Outcomes = new Map(),
+  explanation: Explanation, sim: SimResult | null, flavour: FlavourId,
+  outcomes: Outcomes = new Map(),
 ): string {
   if (explanation.rows.length === 0) {
     return `<p class="empty">${escapeHtml(explanation.summary)}</p>`;
   }
+  const rows = explanation.rows.map((r) => renderRow(r, sim, flavour, outcomes)).join('');
   return `<p class="summary">${escapeHtml(explanation.summary)}</p>`
-    + `<ul class="expl">${explanation.rows.map((r) => renderRow(r, sim, outcomes)).join('')}</ul>`;
+    + `<ul class="expl">${rows}</ul>`;
 }
 
 /** Turns "skipped" into "why": which condition actually failed. */
@@ -36,7 +39,9 @@ function conditionMarker(truth: Truth | undefined): string {
     + ` aria-label="${label}">${symbol}</span>`;
 }
 
-function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): string {
+function renderRow(
+  row: ExplRow, sim: SimResult | null, flavour: FlavourId, outcomes: Outcomes,
+): string {
   const verdict = sim?.byClause.get(row.id)?.verdict;
   const classes = ['expl-row', `kind-${row.kind}`];
   if (row.severity) classes.push(`sev-${row.severity}`);
@@ -62,10 +67,14 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
          onerror="this.style.visibility='hidden'">`
     : '';
 
-  // Only spell-bearing chips are focusable, so the tooltip works without a mouse.
-  const spellAttrs = row.spell
-    ? ` data-spell="${escapeHtml(row.spell.name)}" tabindex="0"`
-    : '';
+  // A spell chip is a real link to the flavour-correct Wowhead page. That is both the
+  // right thing to click and the only way to get Wowhead's live tooltip: their embed
+  // attaches to <a>/<area> and to nothing else. No tabindex -- a link is already
+  // focusable, and the href carries the game version (see wowheadUrl).
+  const chip = row.spell
+    ? `<a class="chip chip-spell" href="${wowheadUrl(row.spell.id, flavour)}"`
+      + ` target="_blank" rel="noopener noreferrer">${icon}${escapeHtml(row.chip)}</a>`
+    : `<code class="chip">${escapeHtml(row.chip)}</code>`;
 
   const outcome = outcomes.get(row.id);
   const outcomeRow = outcome
@@ -76,13 +85,11 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
 
   const children = row.children.length || outcomeRow
     ? `<ul class="expl">${outcomeRow}`
-      + `${row.children.map((c) => renderRow(c, sim, outcomes)).join('')}</ul>`
+      + `${row.children.map((c) => renderRow(c, sim, flavour, outcomes)).join('')}</ul>`
     : '';
 
   return `<li class="${classes.join(' ')}" data-node="${row.id}">`
-    + `<div class="expl-head">${marker}`
-    + `<code class="chip${row.spell ? ' chip-spell' : ''}"${spellAttrs}>${icon}`
-    + `${escapeHtml(row.chip)}</code>`
+    + `<div class="expl-head">${marker}${chip}`
     + `<span class="expl-text">${escapeHtml(row.text)}</span>${badge}`
     + `</div>${children}</li>`;
 }

@@ -136,6 +136,39 @@ URLs, so switching to self-hosting or a proxy is a one-line change.
 - Always give explicit `width`/`height` and an `onerror` that hides the image. Graceful
   degradation is a requirement: the CDN offers no uptime guarantee for this use.
 
+## Tooltips
+
+Spell tooltips are Wowhead's, not ours. The in-game descriptions in `Spell.db2` are
+templates (`"Deals $s1 Frost damage"`) resolved at runtime from effect values and caster
+stats we do not have, so rendering them ourselves would mean inventing numbers. Wowhead
+resolves them properly, and their embed does it for any link we emit. The script is
+hotlinked, never vendored, on the same terms as the icons: one `SCRIPT_URL` constant in
+`src/ui/wowhead.ts`.
+
+Four things, all read out of the minified script rather than its docs page (which answers
+403 to anything that is not a browser — the plain-text docs are unreachable by `curl`):
+
+- **The trigger must be an `<a>` or `<area>`.** `data-wowhead` on a `<span>` or `<code>`
+  is ignored outright. That is the whole reason a spell chip is an anchor rather than the
+  `<code>` every other chip is.
+- **One `mouseover` handler is bound on `document`.** Links rendered afterwards are picked
+  up for free, so `update()` can re-render the explanation on every keystroke without
+  calling `$WowheadPower.refreshLinks()`. That function exists only to re-apply the
+  rename/colour/iconize decoration, which is why all three are turned off in `whTooltips`
+  — we want our own icon, our own `--tok-*` colours, and the macro token verbatim.
+- **The game version comes from the href's path prefix**, so a correct URL from
+  `wowheadUrl` is the entire integration. The mapping is flavour data (`wowheadPath` in
+  `src/flavours.ts`): Midnight has no prefix, Forever is `/forever/` and Classic Era is
+  `/classic/`. Wowhead's own enum calls Forever `CLASSICPLUS` and maps it to `"forever"` —
+  do not guess a new flavour's segment, read it out of the script.
+- **Load it lazily.** `ensureWowheadTooltips()` is called only once a render has produced
+  a spell chip, so an empty editor never contacts Wowhead. The footer discloses this; keep
+  the two in step.
+
+Losing Wowhead degrades to a chip with no tooltip, which is still a working link — there
+is deliberately no fallback popover. The one casualty is `SpellRecord.ambiguous`, which no
+longer has any UI surface.
+
 ## UI gotchas
 
 - **The highlight overlay and the textarea must share font metrics exactly.** Font size,
