@@ -85,6 +85,85 @@ export function specsFor(classId: number): string[] {
   return SPECS_BY_CLASS[classId] ?? [];
 }
 
+export interface FormOption {
+  /** The number [form:N] / [stance:N] uses. */
+  index: number;
+  name: string;
+  /** Only reachable by this specialisation, when set. */
+  spec?: number;
+}
+
+/**
+ * Shapeshift bar contents, but only where two independent sources agree: the
+ * StanceBarOrder column in SpellShapeshift, and the long-established macro indexes.
+ *
+ * Retail's StanceBarOrder maps straight to the macro index (Bear 1, Cat 2, Travel 3,
+ * Moonkin 4). The Classic lines are offset by one -- the default form is absent from the
+ * table, so Aquatic 1 / Cat 2 / Travel 3 means Bear 1 / Aquatic 2 / Cat 3 / Travel 4,
+ * which is exactly the known vanilla ordering. Warrior stances corroborate the same
+ * offset: Defensive 1 / Berserker 2 means Battle 1 / Defensive 2 / Berserker 3.
+ *
+ * Deliberately absent: retail Warrior stances, where the data contradicts the classic
+ * order and the stances are talent-gated. Those keep a plain number, because a wrong
+ * index is worse than an unlabelled one.
+ */
+const DRUID_RETAIL: FormOption[] = [
+  { index: 1, name: 'Bear Form' },
+  { index: 2, name: 'Cat Form' },
+  { index: 3, name: 'Travel Form' },
+  { index: 4, name: 'Moonkin Form', spec: 1 },
+  { index: 5, name: 'Incarnation: Tree of Life', spec: 4 },
+];
+
+const DRUID_VANILLA: FormOption[] = [
+  { index: 1, name: 'Bear Form' },
+  { index: 2, name: 'Aquatic Form' },
+  { index: 3, name: 'Cat Form' },
+  { index: 4, name: 'Travel Form' },
+  { index: 5, name: 'Moonkin Form' },
+];
+
+const WARRIOR_VANILLA: FormOption[] = [
+  { index: 1, name: 'Battle Stance' },
+  { index: 2, name: 'Defensive Stance' },
+  { index: 3, name: 'Berserker Stance' },
+];
+
+const ROGUE: FormOption[] = [{ index: 1, name: 'Stealth' }];
+const SHAMAN: FormOption[] = [{ index: 1, name: 'Ghost Wolf' }];
+const PRIEST_RETAIL: FormOption[] = [{ index: 1, name: 'Shadowform', spec: 3 }];
+
+/**
+ * Per flavour, per class. An empty array means "has a stance bar but we will not name
+ * the slots"; an absent entry means the class has no forms at all.
+ */
+const FORMS_BY_FLAVOUR: Record<FlavourId, Record<number, FormOption[]>> = {
+  retail: { 1: [], 4: ROGUE, 5: PRIEST_RETAIL, 7: SHAMAN, 11: DRUID_RETAIL },
+  forever: { 1: WARRIOR_VANILLA, 4: ROGUE, 7: SHAMAN, 11: DRUID_VANILLA },
+  era: { 1: WARRIOR_VANILLA, 4: ROGUE, 7: SHAMAN, 11: DRUID_VANILLA },
+};
+
+/** 'none' = hide the control, 'unnamed' = plain number, otherwise a named list. */
+export type FormSupport = 'none' | 'unnamed' | FormOption[];
+
+export function formSupport(flavour: FlavourId, classId: number, spec: number): FormSupport {
+  if (classId === ANY_CLASS) return 'unnamed';
+  const forms = FORMS_BY_FLAVOUR[flavour][classId];
+  if (forms === undefined) return 'none';
+  if (forms.length === 0) return 'unnamed';
+  const available = forms.filter((f) => f.spec === undefined || f.spec === spec);
+  return available.length ? available : 'unnamed';
+}
+
+/** The form name for an index, when we are confident enough to give one. */
+export function formName(
+  flavour: FlavourId, classId: number, spec: number, index: number,
+): string | null {
+  const support = formSupport(flavour, classId, spec);
+  if (support === 'none' || support === 'unnamed') return null;
+  return support.find((f) => f.index === index)?.name ?? null;
+}
+
 const BY_ID = new Map(WOW_CLASSES.map((c) => [c.id, c]));
 
 export function className(id: number): string | null {

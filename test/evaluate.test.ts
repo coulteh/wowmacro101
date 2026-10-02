@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseMacro } from '../src/parser/parser';
 import { evaluateMacro } from '../src/sim/evaluate';
 import { defaultSimState, type SimState } from '../src/sim/state';
-import { hasPet, specsFor, WOW_CLASSES } from '../src/data/classes';
+import { formName, formSupport, hasPet, specsFor, WOW_CLASSES } from '../src/data/classes';
 
 function sim(src: string, tweak: (s: SimState) => void = () => {}) {
   const state = defaultSimState();
@@ -279,5 +279,49 @@ describe('specialisation data', () => {
     expect(hasPet('era', 3)).toBe(true);
     // Unknown class shows the controls rather than hiding them.
     expect(hasPet('retail', 0)).toBe(true);
+  });
+});
+
+describe('form support per class and version', () => {
+  it('names only what two sources agree on', () => {
+    expect(formSupport('retail', 11, 1)).toEqual([
+      { index: 1, name: 'Bear Form' },
+      { index: 2, name: 'Cat Form' },
+      { index: 3, name: 'Travel Form' },
+      { index: 4, name: 'Moonkin Form', spec: 1 },
+    ]);
+    // Retail Warrior stances exist but are talent-gated and the data contradicts the
+    // classic order, so they stay unnamed rather than risk being wrong.
+    expect(formSupport('retail', 1, 1)).toBe('unnamed');
+    expect(formSupport('era', 1, 1)).toEqual([
+      { index: 1, name: 'Battle Stance' },
+      { index: 2, name: 'Defensive Stance' },
+      { index: 3, name: 'Berserker Stance' },
+    ]);
+  });
+
+  it('hides the control for classes with no shapeshift bar', () => {
+    for (const classId of [2, 3, 8, 9, 10, 12, 13]) {
+      expect(formSupport('retail', classId, 1), `class ${classId}`).toBe('none');
+    }
+    // Shadowform is a retail Shadow priest thing; vanilla priests have no forms.
+    expect(formSupport('retail', 5, 3)).toEqual([{ index: 1, name: 'Shadowform', spec: 3 }]);
+    expect(formSupport('era', 5, 1)).toBe('none');
+  });
+
+  it('falls back to a number rather than an empty list when spec gates everything out', () => {
+    // A Discipline priest has no forms, but the class does have one.
+    expect(formSupport('retail', 5, 1)).toBe('unnamed');
+  });
+
+  it('shows a number when no class is chosen', () => {
+    expect(formSupport('retail', 0, 1)).toBe('unnamed');
+  });
+
+  it('resolves a form name only when confident', () => {
+    expect(formName('era', 11, 1, 3)).toBe('Cat Form');
+    expect(formName('retail', 11, 1, 3)).toBe('Travel Form');
+    expect(formName('retail', 1, 1, 1)).toBeNull();
+    expect(formName('retail', 11, 1, 9)).toBeNull();
   });
 });

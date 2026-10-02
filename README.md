@@ -202,6 +202,27 @@ Each bundled example is tagged with the class it is written for, and loading one
 that class — otherwise the app warns about its own examples using another class's
 abilities.
 
+### Shapeshift forms
+
+`[form:N]` / `[stance:N]` indexes the shapeshift bar, which is per class and per version.
+Forms are named **only where two independent sources agree**: the `StanceBarOrder` column
+in `SpellShapeshift`, and the long-established macro indexes.
+
+Retail's `StanceBarOrder` maps straight to the macro index — Bear 1, Cat 2, Travel 3,
+Moonkin 4. The Classic lines are offset by one, because the default form is absent from
+the table: Aquatic 1 / Cat 2 / Travel 3 means Bear 1 / Aquatic 2 / Cat 3 / Travel 4, which
+is exactly the known vanilla ordering. Warrior stances corroborate the same offset —
+Defensive 1 / Berserker 2 means Battle 1 / Defensive 2 / Berserker 3.
+
+Deliberately **not** named: retail Warrior stances, where the data contradicts the classic
+order and the stances are talent-gated. Those keep a plain number, because a wrong index
+is worse than an unlabelled one. Classes with no shapeshift bar lose the control entirely.
+
+Spec gates the list — Moonkin is Balance-only, Tree of Life Restoration-only. And a
+`[spec:N]` inside a condition group names forms for that branch in preference to whatever
+is selected in the panel, since the group is an AND: `[spec:1,form:4]` reads "Moonkin
+Form" even while you are simulating a Guardian.
+
 ### Known limitation: rank metadata
 
 Each dataset holds one record per *name*, so where a name covers several ranks — 25.6% of

@@ -1,6 +1,8 @@
 // The "situation" panel: the macro equivalent of regex101's test string.
 
-import { ANY_CLASS, classesFor, hasPet, specsFor, wowClass } from '../data/classes';
+import {
+  ANY_CLASS, classesFor, formSupport, hasPet, specsFor, wowClass,
+} from '../data/classes';
 import { iconUrl } from '../data/spells';
 import type { FlavourId } from '../flavours';
 import type { SimState } from '../sim/state';
@@ -47,6 +49,29 @@ function renderSpecControl(classId: number, current: number): string {
     + `<select data-path="spec" data-type="number">${options}</select></label>`;
 }
 
+/**
+ * Named where we are confident of the bar order, a plain number where we are not, and
+ * absent for classes with no shapeshift bar at all.
+ */
+function renderFormControl(
+  flavour: FlavourId, classId: number, spec: number, current: number,
+): string {
+  const support = formSupport(flavour, classId, spec);
+  if (support === 'none') return '';
+  if (support === 'unnamed') {
+    return '<label class="sim-field"><span>form / stance</span>'
+      + `<input type="number" min="0" max="10" value="${current}" data-path="form" data-type="number">`
+      + '</label>';
+  }
+  const options = [
+    `<option value="0"${current === 0 ? ' selected' : ''}>0 — no form</option>`,
+    ...support.map((f) => `<option value="${f.index}"${f.index === current ? ' selected' : ''}>`
+      + `${escapeHtml(`${f.index} — ${f.name}`)}</option>`),
+  ].join('');
+  return '<label class="sim-field"><span>form / stance</span>'
+    + `<select data-path="form" data-type="number">${options}</select></label>`;
+}
+
 function unitSection(slot: 'target' | 'focus' | 'mouseover', title: string): Section {
   return {
     title,
@@ -84,7 +109,6 @@ export const SECTIONS: Section[] = [
       { kind: 'check', label: 'indoors', path: 'indoors' },
       { kind: 'check', label: 'resting', path: 'resting' },
       { kind: 'check', label: 'channelling', path: 'channeling' },
-      { kind: 'number', label: 'form / stance', path: 'form', min: 0, max: 10 },
       { kind: 'number', label: 'action bar', path: 'actionbar', min: 1, max: 6 },
       {
         kind: 'select', label: 'group', path: 'group', type: 'string',
@@ -168,8 +192,9 @@ export function renderSimulator(state: SimState, flavour: FlavourId, classId: nu
       let body = section.controls.map((c) => renderControl(state, c)).join('');
       // The spec control is built from the class rather than the control list, and
       // [spec:N] does not exist at all on versions without specialisations.
-      if (section.title === 'You are' && specAvailable(flavour)) {
-        body += renderSpecControl(classId, state.spec);
+      if (section.title === 'You are') {
+        body += renderFormControl(flavour, classId, state.spec, state.form);
+        if (specAvailable(flavour)) body += renderSpecControl(classId, state.spec);
       }
       return `<fieldset class="sim-section"><legend>${escapeHtml(section.title)}</legend>`
         + `<div class="sim-controls">${body}</div></fieldset>`;

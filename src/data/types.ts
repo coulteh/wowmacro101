@@ -1,4 +1,11 @@
 import type { AvailabilityMap, FlavourId } from '../flavours';
+
+/** Who the player is, for descriptions that can be named rather than numbered. */
+export interface DescContext {
+  classId?: number;
+  flavour?: FlavourId;
+  spec?: number;
+}
 import type { SimState, UnitState } from '../sim/state';
 
 /** Tri-state: the simulator never guesses at things it cannot model. */
@@ -23,9 +30,10 @@ export interface ConditionalDef {
   /**
    * Plain-English phrase. Negation is handled here so wording stays natural.
    * `unit` is how to name the unit under test, e.g. 'the unit under your mouse cursor'.
-   * `classId` is the selected class, which lets [spec:N] name the specialisation.
+   * `ctx` carries who the player is, so [spec:N] and [form:N] can be named rather
+   * than numbered. Only those two entries use it.
    */
-  desc: (values: string[], negated: boolean, unit?: string, classId?: number) => string;
+  desc: (values: string[], negated: boolean, unit?: string, ctx?: DescContext) => string;
   note?: string;
   availability?: AvailabilityMap;
   flavourNotes?: Partial<Record<FlavourId, string>>;

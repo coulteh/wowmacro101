@@ -4,7 +4,7 @@
 // plain-English explanation, and it evaluates itself against a simulated situation.
 // Keeping those together is what stops the explainer and the simulator drifting apart.
 
-import { specsFor } from './classes';
+import { formName, specsFor } from './classes';
 import type { ConditionalDef, EvalContext, Truth } from './types';
 
 const no = (n: boolean) => (n ? 'not ' : '');
@@ -214,8 +214,8 @@ export const CONDITIONALS: ConditionalDef[] = [
     strictValues: true,
     short: 'Active specialisation',
     // Named when we know the class, because "specialisation 2" means nothing on its own.
-    desc: (v, n, _u, classId) => {
-      const specs = specsFor(classId ?? 0);
+    desc: (v, n, _u, ctx) => {
+      const specs = specsFor(ctx?.classId ?? 0);
       const named = v
         .map((value) => specs[Number(value) - 1])
         .filter((name): name is string => Boolean(name));
@@ -246,11 +246,21 @@ export const CONDITIONALS: ConditionalDef[] = [
     name: 'stance', aliases: ['form'], category: 'Player', value: 'optional',
     values: ['0', '1', '2', '3', '4', '5', '6'],
     short: 'Shapeshift form / stance',
-    desc: (v, n) => (v.length
-      ? (v.includes('0')
+    desc: (v, n, _u, ctx) => {
+      if (!v.length) return `you are ${no(n)}in some shapeshift form`;
+      const named = v.map((value) => (value === '0'
+        ? 'no form'
+        : (ctx?.flavour
+          ? formName(ctx.flavour, ctx.classId ?? 0, ctx.spec ?? 1, Number(value))
+          : null)));
+      // All or nothing: a half-named list would read worse than plain numbers.
+      if (named.every((name): name is string => Boolean(name))) {
+        return `you are ${no(n)}in ${or(named as string[])}`;
+      }
+      return v.includes('0')
         ? `you are ${no(n)}in form ${or(v)} (0 = no form / caster form)`
-        : `you are ${no(n)}in stance/form ${or(v)}`)
-      : `you are ${no(n)}in some shapeshift form`),
+        : `you are ${no(n)}in stance/form ${or(v)}`;
+    },
     note: 'Numbers are per class and follow the order of your stance bar. [form:0] is humanoid/caster form.',
     test: (ctx) => (ctx.values.length
       ? ctx.values.some((v) => Number(v) === ctx.state.form)

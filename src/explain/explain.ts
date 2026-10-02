@@ -5,7 +5,8 @@ import type { SpellIndex, SpellRecord } from '../data/spells';
 import { describeUnit } from '../data/units';
 import { SPELL_NAME_COMMANDS } from '../parser/parser';
 import { FLAVOURS } from '../flavours';
-import type { Clause, Line, MacroAst, NodeId, Severity } from '../parser/types';
+import type { DescContext } from '../data/types';
+import type { Clause, CondGroup, Line, MacroAst, NodeId, Severity } from '../parser/types';
 import {
   describeCondition, describeGroups, describeGroupTests, groupUnit, joinList,
   hasAnyTests, sharedExplicitUnit, unitLabelFor, unitsDiffer,
@@ -37,6 +38,8 @@ export interface ExplainOptions {
   spells?: SpellIndex | null;
   /** Selected class, which lets [spec:N] be named rather than numbered. */
   classId?: number;
+  /** Selected specialisation, which gates which shapeshift forms exist. */
+  spec?: number;
 }
 
 export interface Explanation {
@@ -54,6 +57,21 @@ function row(
     ...(severity ? { severity } : {}),
     ...(spell ? { spell } : {}),
   };
+}
+
+/** A single, un-negated [spec:N] in a group tells us the spec for that whole branch. */
+function specInGroup(group: CondGroup, ctx: DescContext): DescContext {
+  const spec = group.conditions.find(
+    (c) => c.kind === 'test' && c.name === 'spec' && !c.negated && c.values.length === 1,
+  );
+  if (!spec) return ctx;
+  const value = Number(spec.values[0].text);
+  return Number.isFinite(value) ? { ...ctx, spec: value } : ctx;
+}
+
+/** The description context, assembled from the macro's flavour and the chosen character. */
+function descContext(ast: MacroAst, options: ExplainOptions): DescContext {
+  return { classId: options.classId, flavour: ast.flavour, spec: options.spec };
 }
 
 export function explainMacro(ast: MacroAst, options: ExplainOptions = {}): Explanation {
@@ -143,10 +161,10 @@ function explainClause(
     const action = clauseAction(line, clause, mode, sharedExplicitUnit(clause.groups));
     text = clause.index === 0 ? capitalise(action) : `Otherwise, ${action}.`;
   } else if (unitsDiffer(clause.groups)) {
-    text = `${describeGroupOutcomes(line, clause, mode, options.classId)}.`;
+    text = `${describeGroupOutcomes(line, clause, mode, descContext(ast, options))}.`;
   } else {
     const action = clauseAction(line, clause, mode, sharedExplicitUnit(clause.groups));
-    const conds = describeGroups(clause.groups, options.classId);
+    const conds = describeGroups(clause.groups, descContext(ast, options));
     const lead = clause.index === 0 ? 'If' : 'Otherwise, if';
     text = `${lead} ${conds}, ${action}.`;
   }
@@ -158,8 +176,10 @@ function explainClause(
       continue;
     }
     const label = unitLabelFor(group);
+    // Same rule as the clause sentence: a [spec:N] in this group describes this branch.
+    const groupCtx = specInGroup(group, descContext(ast, options));
     for (const cond of group.conditions) {
-      const phrase = describeCondition(cond, label, options.classId);
+      const phrase = describeCondition(cond, label, groupCtx);
       // Frame a test as a condition, not a fact. "You are holding Shift" next to a red
       // cross reads as a contradiction; "Only if you are holding Shift" does not.
       // Unit redirects are not tests and keep their own phrasing.
@@ -209,10 +229,10 @@ function explainClause(
  * "A or B" form would describe two different behaviours as if they were one.
  */
 function describeGroupOutcomes(
-  line: Line, clause: Clause, mode: 'do' | 'show', classId?: number,
+  line: Line, clause: Clause, mode: 'do' | 'show', ctx?: DescContext,
 ): string {
   const segments = clause.groups.map((group, gi) => {
-    const tests = describeGroupTests(group, classId);
+    const tests = describeGroupTests(group, ctx);
     const action = clauseAction(line, clause, mode, groupUnit(group) ?? 'target');
     if (!tests) return gi === 0 ? capitaliseFragment(action) : `otherwise ${action}`;
     const lead = gi === 0 ? (clause.index === 0 ? 'If' : 'Otherwise, if') : 'otherwise if';
@@ -284,7 +304,7 @@ function summarise(ast: MacroAst, options: ExplainOptions = {}): string {
 
   const steps = ast.lines
     .filter((l) => l.kind === 'command' && l.command?.def)
-    .map((l) => summariseLine(l, options))
+    .map((l) => summariseLine(l, ast, options))
     .filter(Boolean) as string[];
 
   if (steps.length === 0) {
@@ -306,7 +326,7 @@ function summarise(ast: MacroAst, options: ExplainOptions = {}): string {
   return parts.join(' ');
 }
 
-function summariseLine(line: Line, options: ExplainOptions = {}): string | null {
+function summariseLine(line: Line, ast: MacroAst, options: ExplainOptions = {}): string | null {
   const def = line.command?.def;
   if (!def) return null;
 
@@ -323,10 +343,10 @@ function summariseLine(line: Line, options: ExplainOptions = {}): string | null 
         return i === 0 ? action : `otherwise ${action}`;
       }
       if (unitsDiffer(clause.groups)) {
-        return lowerFirst(describeGroupOutcomes(line, clause, 'do', options.classId));
+        return lowerFirst(describeGroupOutcomes(line, clause, 'do', descContext(ast, options)));
       }
       const action = clauseAction(line, clause, 'do', sharedExplicitUnit(clause.groups));
-      const conds = describeGroups(clause.groups, options.classId);
+      const conds = describeGroups(clause.groups, descContext(ast, options));
       return `${i === 0 ? 'if' : 'otherwise if'} ${conds}, ${action}`;
     })
     .filter(Boolean);

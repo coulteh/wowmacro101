@@ -256,3 +256,84 @@ describe('specialisations are named, not numbered', () => {
     expect(summary).toContain('your specialisation is Protection');
   });
 });
+
+describe('shapeshift forms are named where we are confident', () => {
+  const describe_ = (src: string, flavour: 'retail' | 'era', classId: number, spec = 1) =>
+    texts(explainMacro(parseMacro(src, flavour), { classId, spec }).rows);
+
+  it('names the modern Druid bar', () => {
+    expect(describe_('/cast [form:2] Shred; Wrath', 'retail', 11))
+      .toContain('Only if you are in Cat Form.');
+    expect(describe_('/cast [form:1] Maul; Wrath', 'retail', 11))
+      .toContain('Only if you are in Bear Form.');
+  });
+
+  it('names the vanilla Druid bar, which is offset from the modern one', () => {
+    // Vanilla inserts Aquatic Form at 2, pushing Cat to 3.
+    expect(describe_('/cast [form:2] Swim; Wrath', 'era', 11))
+      .toContain('Only if you are in Aquatic Form.');
+    expect(describe_('/cast [form:3] Claw; Wrath', 'era', 11))
+      .toContain('Only if you are in Cat Form.');
+  });
+
+  it('names vanilla Warrior stances', () => {
+    expect(describe_('/cast [stance:1] Charge; Slam', 'era', 1))
+      .toContain('Only if you are in Battle Stance.');
+    expect(describe_('/cast [stance:3] Whirlwind; Slam', 'era', 1))
+      .toContain('Only if you are in Berserker Stance.');
+  });
+
+  it('keeps numbers for retail Warrior, where the data contradicts the old order', () => {
+    const all = describe_('/cast [stance:1] Charge; Slam', 'retail', 1);
+    expect(all.some((t) => /stance\/form 1/.test(t))).toBe(true);
+    expect(all.join(' ')).not.toMatch(/Battle Stance/);
+  });
+
+  it('respects spec gating', () => {
+    // Moonkin is slot 4 for Balance; a Feral druid has no form 4 to name.
+    expect(describe_('/cast [form:4] Starfire; Wrath', 'retail', 11, 1))
+      .toContain('Only if you are in Moonkin Form.');
+    expect(describe_('/cast [form:4] Starfire; Wrath', 'retail', 11, 2).join(' '))
+      .not.toMatch(/Moonkin/);
+  });
+
+  it('names form 0 as no form', () => {
+    expect(describe_('/cast [form:0] Wrath; Shred', 'retail', 11))
+      .toContain('Only if you are in no form.');
+  });
+
+  it('falls back to numbers with no class chosen', () => {
+    const all = texts(explainMacro(parseMacro('/cast [form:2] A; B', 'retail')).rows);
+    expect(all.some((t) => /stance\/form 2/.test(t))).toBe(true);
+  });
+});
+
+describe('a spec condition names forms in its own branch', () => {
+  it('uses [spec:N] from the same group rather than the selected spec', () => {
+    // Panel spec is Guardian (3), but the clause itself says Balance (1), so form 4
+    // there is Moonkin.
+    const all = texts(explainMacro(
+      parseMacro('/cast [spec:1,form:4] Starfire; Wrath', 'retail'),
+      { classId: 11, spec: 3 },
+    ).rows);
+    expect(all).toContain('Only if you are in Moonkin Form.');
+    expect(all.join(' ')).not.toMatch(/stance\/form 4/);
+  });
+
+  it('does not let one group leak into another', () => {
+    const all = texts(explainMacro(
+      parseMacro('/cast [spec:1,form:4] Starfire; [form:4] Something; Wrath', 'retail'),
+      { classId: 11, spec: 2 },
+    ).rows);
+    // First clause names it; the second has no spec of its own and Feral has no form 4.
+    expect(all).toContain('Only if you are in Moonkin Form.');
+    expect(all.some((t) => /stance\/form 4/.test(t))).toBe(true);
+  });
+
+  it('ignores a negated or multi-valued spec condition', () => {
+    const negated = texts(explainMacro(
+      parseMacro('/cast [nospec:1,form:4] X; Y', 'retail'), { classId: 11, spec: 2 },
+    ).rows);
+    expect(negated.some((t) => /stance\/form 4/.test(t))).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 import './styles.css';
 
-import { ANY_CLASS, isClassAvailable, specsFor } from './data/classes';
+import { ANY_CLASS, formSupport, isClassAvailable, specsFor } from './data/classes';
 import { EXAMPLES } from './data/examples';
 import { loadSpellIndex, type SpellIndex } from './data/spells';
 import { describeAction, explainMacro } from './explain/explain';
@@ -95,7 +95,7 @@ function renderOutputs(): void {
   }
   // The popover points at DOM we are about to replace.
   hideSpellTooltip();
-  explanationEl.innerHTML = renderExplanation(explainMacro(ast, { spells, classId: state.classId }), result, outcomes);
+  explanationEl.innerHTML = renderExplanation(explainMacro(ast, { spells, classId: state.classId, spec: state.sim.spec }), result, outcomes);
   renderIssues();
   applyCaretHighlight();
 }
@@ -293,6 +293,7 @@ function bind(): void {
     // it no longer offers.
     if (!isClassAvailable(state.flavour, state.classId)) state.classId = ANY_CLASS;
     clampSpec();
+    clampForm();
     renderFlavourNote();
     renderRef();
     renderSimPanel();
@@ -308,6 +309,7 @@ function bind(): void {
     const wanted = example.classId ?? ANY_CLASS;
     state.classId = isClassAvailable(state.flavour, wanted) ? wanted : ANY_CLASS;
     clampSpec();
+    clampForm();
     renderSimPanel();
     setMacro(example.macro);
     examplesSelect.value = '-1';
@@ -385,6 +387,7 @@ function onSimChange(event: Event): void {
   if (path === 'class') {
     state.classId = Number(target.value) || ANY_CLASS;
     clampSpec();
+    clampForm();
     renderCharacterPanel();
     update();
     return;
@@ -393,7 +396,26 @@ function onSimChange(event: Event): void {
     ? target.checked
     : target.value;
   applyControlChange(state.sim, path, target.dataset.type ?? 'string', raw);
+  // Spec gates which forms exist (Moonkin is Balance-only), so the form control has to
+  // be rebuilt when it changes.
+  if (path === 'spec') {
+    clampForm();
+    renderCharacterPanel();
+  }
   renderOutputs();
+}
+
+/** A form that the new spec cannot reach would leave the select and the simulator disagreeing. */
+function clampForm(): void {
+  const support = formSupport(state.flavour, state.classId, state.sim.spec);
+  if (support === 'none') {
+    state.sim.form = 0;
+    return;
+  }
+  if (support === 'unnamed') return;
+  if (state.sim.form !== 0 && !support.some((f) => f.index === state.sim.form)) {
+    state.sim.form = 0;
+  }
 }
 
 function populateSelects(): void {

@@ -1,4 +1,5 @@
 import { describeUnit } from '../data/units';
+import type { DescContext } from '../data/types';
 import type { CondGroup, Condition } from '../parser/types';
 
 export function joinList(parts: string[], conjunction: 'and' | 'or'): string {
@@ -26,13 +27,13 @@ export function unitLabelFor(group: CondGroup): string {
 }
 
 export function describeCondition(
-  cond: Condition, unitLabel?: string, classId?: number,
+  cond: Condition, unitLabel?: string, ctx?: DescContext,
 ): string {
   if (cond.kind === 'unit') {
     return `act on ${describeUnit(cond.unit ?? '')} instead of your current target`;
   }
   if (!cond.def) return `"${cond.name}" is not a condition the game understands`;
-  return cond.def.desc(cond.values.map((v) => v.text), cond.negated, unitLabel, classId);
+  return cond.def.desc(cond.values.map((v) => v.text), cond.negated, unitLabel, ctx);
 }
 
 /**
@@ -42,13 +43,28 @@ export function describeCondition(
  * "your mouseover is friendly, is not dead and exists" rather than repeating the
  * whole noun phrase each time.
  */
-export function describeGroupTests(group: CondGroup, classId?: number): string {
+/**
+ * A group is an AND, so a [spec:N] inside it constrains the same branch as everything
+ * else in it. That is better information than whatever spec the panel happens to have
+ * selected, and it is what lets [spec:1,form:4] read "Moonkin Form".
+ */
+function specFromGroup(group: CondGroup, ctx?: DescContext): DescContext | undefined {
+  const spec = group.conditions.find(
+    (c) => c.kind === 'test' && c.name === 'spec' && !c.negated && c.values.length === 1,
+  );
+  if (!spec) return ctx;
+  const value = Number(spec.values[0].text);
+  return Number.isFinite(value) ? { ...ctx, spec: value } : ctx;
+}
+
+export function describeGroupTests(group: CondGroup, outer?: DescContext): string {
+  const ctx = specFromGroup(group, outer);
   const label = unitLabelFor(group);
   let labelUsed = false;
   const tests = group.conditions
     .filter((c) => c.kind !== 'unit')
     .map((c) => {
-      const phrase = describeCondition(c, label, classId);
+      const phrase = describeCondition(c, label, ctx);
       if (phrase.startsWith(`${label} `)) {
         if (labelUsed) return phrase.slice(label.length + 1);
         labelUsed = true;
@@ -87,9 +103,9 @@ export function hasAnyTests(groups: CondGroup[]): boolean {
 }
 
 /** OR-ed groups for the compact form: "(A and B) or C". */
-export function describeGroups(groups: CondGroup[], classId?: number): string {
+export function describeGroups(groups: CondGroup[], ctx?: DescContext): string {
   const parts = groups.map((g) => {
-    const tests = describeGroupTests(g, classId);
+    const tests = describeGroupTests(g, ctx);
     if (!tests) return 'unconditionally';
     const multi = g.conditions.filter((c) => c.kind !== 'unit').length > 1;
     return groups.length > 1 && multi ? `(${tests})` : tests;
