@@ -134,12 +134,10 @@ function renderSimPanel(): void {
 
 function renderFlavourNote(): void {
   const flavour = FLAVOURS[state.flavour];
-  if (flavour.provisional && flavour.note) {
-    flavourNote.textContent = flavour.note;
-    flavourNote.hidden = false;
-  } else {
-    flavourNote.hidden = true;
-  }
+  flavourNote.hidden = !flavour.note;
+  flavourNote.textContent = flavour.note ?? '';
+  // Provisional flavours get the louder treatment; a plain note is informational.
+  flavourNote.classList.toggle('provisional', flavour.provisional);
 }
 
 // --- Editor plumbing -------------------------------------------------------

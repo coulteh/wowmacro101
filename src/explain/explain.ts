@@ -180,9 +180,11 @@ function explainClause(
       ));
     }
     seq.spells.forEach((s, i) => {
+      const rank = s.rank ? ` Cast at rank ${s.rank}.` : '';
       children.push(row(
-        `${clause.id}-step${i}`, 'step', s.text,
-        `Step ${i + 1} of ${seq.spells.length}. Only a successful cast advances the sequence.`,
+        `${clause.id}-step${i}`, 'step', s.rank ? `${s.text} (rank ${s.rank})` : s.text,
+        `Step ${i + 1} of ${seq.spells.length}.${rank} `
+        + 'Only a successful cast advances the sequence.',
         [], undefined, spellFor(line, s.text, options),
       ));
     });
@@ -238,7 +240,8 @@ function clauseAction(
   if (!arg) {
     return unit && def.unitAction ? def.unitAction(describeUnit(unit)) : def.action('');
   }
-  return def.action(arg) + target;
+  const rank = clause.arg?.rank ? ` (rank ${clause.arg.rank})` : '';
+  return def.action(arg) + rank + target;
 }
 
 function describeReset(parts: string[]): string {

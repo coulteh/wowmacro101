@@ -49,9 +49,15 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
   const marker = row.kind === 'condition' ? conditionMarker(sim?.byCondition.get(row.id)) : '';
 
   // Explicit dimensions so a slow or failed icon load never shifts the layout.
+  //
+  // Deliberately NOT loading="lazy": lazy images inserted via innerHTML into an
+  // already-laid-out container do not reliably trigger their intersection check, so
+  // they sit pending until some later layout pass and the icons just never appear.
+  // There is nothing to gain anyway -- only the few spells in the current macro are
+  // ever rendered, at 1-2 kB each.
   const icon = row.spell?.icon
     ? `<img class="spell-icon" src="${iconUrl(row.spell.icon, 36)}" alt="" width="20" height="20"
-         loading="lazy" onerror="this.style.visibility='hidden'">`
+         onerror="this.style.visibility='hidden'">`
     : '';
 
   // Only spell-bearing chips are focusable, so the tooltip works without a mouse.

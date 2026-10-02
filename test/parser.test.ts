@@ -307,13 +307,97 @@ describe('soft spell validation', () => {
     expect(infos(ast)[0].message).toMatch(/Nonsense Shot/);
   });
 
-  it('does not second-guess slot numbers, item ids or rank syntax', () => {
-    for (const macro of ['/use 13', '/cast item:12345', '/cast spell:133', '/cast Fireball(Rank 1)']) {
+  it('does not second-guess slot numbers or item ids', () => {
+    for (const macro of ['/use 13', '/cast item:12345', '/cast spell:133']) {
       expect(infos(parseMacro(macro, 'retail', { spells: index }))).toHaveLength(0);
     }
   });
 
   it('leaves chat and Lua text alone', () => {
     expect(parseMacro('/say Some Random Words', 'retail', { spells: index }).issues).toHaveLength(0);
+  });
+});
+
+
+describe('spell ranks', () => {
+  it('splits the rank off on Classic Era and keeps the base name', () => {
+    const ast = parseMacro('/cast Fireball(Rank 3)', 'era');
+    const [clause] = ast.lines[0].clauses;
+    expect(clause.arg?.text).toBe('Fireball');
+    expect(clause.arg?.rank).toBe(3);
+    expect(errors(ast)).toHaveLength(0);
+  });
+
+  it('tolerates loose spacing and casing', () => {
+    for (const macro of ['/cast Fireball( rank 3 )', '/cast Fireball (RANK 3)']) {
+      const clause = parseMacro(macro, 'era').lines[0].clauses[0];
+      expect(clause.arg?.text, macro).toBe('Fireball');
+      expect(clause.arg?.rank, macro).toBe(3);
+    }
+  });
+
+  it('gives the rank its own token so it highlights separately', () => {
+    const ast = parseMacro('/cast Fireball(Rank 3)', 'era');
+    const rank = ast.lines[0].tokens.find((t) => t.type === 'rank')!;
+    expect(ast.source.slice(rank.start, rank.end)).toBe('(Rank 3)');
+    const arg = ast.lines[0].tokens.find((t) => t.type === 'arg')!;
+    expect(ast.source.slice(arg.start, arg.end)).toBe('Fireball');
+  });
+
+  it('validates the base name, not the whole string', () => {
+    const index = {
+      build: 'test', count: 1,
+      has: (name: string) => name.trim().toLowerCase() === 'fireball',
+      lookup: () => null,
+    };
+    expect(infos(parseMacro('/cast Fireball(Rank 3)', 'era', { spells: index }))).toHaveLength(0);
+    expect(infos(parseMacro('/cast Firebal(Rank 3)', 'era', { spells: index }))[0].message)
+      .toMatch(/"Firebal" is not in the bundled spell list/);
+  });
+
+  it('reads ranks in a castsequence', () => {
+    const ast = parseMacro('/castsequence Fireball(Rank 1), Frostbolt(Rank 2)', 'era');
+    const steps = ast.lines[0].clauses[0].sequence!.spells;
+    expect(steps.map((s) => [s.text, s.rank])).toEqual([['Fireball', 1], ['Frostbolt', 2]]);
+  });
+
+  it('leaves the name alone on Midnight but says why it will not work', () => {
+    const ast = parseMacro('/cast Fireball(Rank 3)', 'retail');
+    const [clause] = ast.lines[0].clauses;
+    expect(clause.arg?.text).toBe('Fireball(Rank 3)');
+    expect(clause.arg?.rank).toBeUndefined();
+    expect(infos(ast)[0].message).toMatch(/Spell ranks were removed in modern World of Warcraft/);
+    expect(errors(ast)).toHaveLength(0);
+  });
+
+  it('says nothing about rank syntax when there is none', () => {
+    expect(parseMacro('/cast Fireball', 'retail').issues).toHaveLength(0);
+    expect(parseMacro('/cast Fireball', 'era').issues).toHaveLength(0);
+  });
+});
+
+describe('Classic Era conditionals', () => {
+  it('rejects specialisations, which vanilla does not have', () => {
+    const ast = parseMacro('/cast [spec:1] Fireball', 'era');
+    expect(warnings(ast)[0].message).toMatch(/can never be true on Classic Era/);
+  });
+
+  it('rejects flying on both Classic Era and Forever', () => {
+    for (const flavour of ['era', 'forever'] as const) {
+      const ast = parseMacro('/cast [flyable] Mount', flavour);
+      expect(warnings(ast)[0].message, flavour).toMatch(/can never be true/);
+    }
+  });
+
+  it('treats row/column talents as native on Classic Era', () => {
+    // Legacy on Midnight, unverified on Forever, but the real thing here.
+    expect(parseMacro('/cast [talent:1/1] Something', 'era').issues).toHaveLength(0);
+    expect(parseMacro('/cast [talent:1/1] Something', 'forever').issues.length).toBeGreaterThan(0);
+  });
+
+  it('admits what it cannot confirm rather than guessing', () => {
+    const ast = parseMacro('/cast [group:raid] Heal', 'era');
+    expect(errors(ast)).toHaveLength(0);
+    expect(infos(ast)[0].message).toMatch(/Unverified on Classic Era/);
   });
 });

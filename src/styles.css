@@ -140,9 +140,14 @@ button:hover { border-color: var(--border-strong); color: var(--accent); }
   margin: 0;
   padding: 10px 24px;
   font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border);
+}
+/* Provisional flavours get the louder treatment; a plain note is informational. */
+.flavour-note.provisional {
   color: var(--warning);
   background: color-mix(in srgb, var(--warning) 12%, transparent);
-  border-bottom: 1px solid var(--border);
 }
 
 /* --- Layout --------------------------------------------------------------- */
@@ -515,3 +520,6 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
   border-top: 1px solid var(--border);
 }
 .site-foot a { color: var(--text-dim); }
+
+/* Classic spell ranks: /cast Fireball(Rank 3) */
+.t-rank { color: var(--tok-meta); }

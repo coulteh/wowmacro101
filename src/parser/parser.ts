@@ -15,11 +15,13 @@ import { DEFAULT_FLAVOUR, FLAVOURS, availabilityOf, type FlavourId } from '../fl
 import {
   MACRO_CHAR_LIMIT,
   type Clause, type CondGroup, type Condition, type Issue, type Line,
-  type MacroAst, type SequenceInfo, type Severity, type Span, type TextSpan,
-  type Token, type TokenType,
+  type MacroAst, type SequenceInfo, type Severity, type Span, type SpellArg,
+  type TextSpan, type Token, type TokenType,
 } from './types';
 
 const RESET_KEYWORDS = new Set(['combat', 'target', 'shift', 'ctrl', 'alt']);
+/** Classic downranking: `/cast Fireball(Rank 3)`. */
+const RANK_SUFFIX = /\s*\(\s*rank\s*(\d+)\s*\)\s*$/i;
 /** Commands whose argument is a spell or aura name worth checking against the dataset. */
 export const SPELL_NAME_COMMANDS = new Set([
   '/cast', '/spell', '/castsequence', '/castrandom', '/cancelaura',
@@ -273,13 +275,14 @@ function parseClause(
       argText = argText.slice(1).trim();
       argStart = arg.end - argText.length;
     }
-    clause.arg = { text: argText, start: argStart, end: argStart + argText.length };
+    const raw: TextSpan = { text: argText, start: argStart, end: argStart + argText.length };
 
     const cmd = line.command?.name.toLowerCase();
     if (cmd === '/castsequence') {
-      clause.sequence = parseSequence(ctx, line, clause, clause.arg);
+      clause.arg = raw;
+      clause.sequence = parseSequence(ctx, line, clause, raw);
     } else {
-      line.tokens.push({ ...clause.arg, type: 'arg', nodeId: clause.id });
+      clause.arg = splitRank(ctx, line, clause.id, raw);
       const checkable = line.kind === 'meta' || (cmd && SPELL_NAME_COMMANDS.has(cmd));
       if (checkable) checkSpellName(ctx, line, clause.arg);
     }
@@ -455,11 +458,54 @@ function parseSequence(ctx: Ctx, line: Line, clause: Clause, arg: TextSpan): Seq
 
   for (const spell of splitWithOffsets(rest, restStart, ',')) {
     if (!spell.text) continue;
-    seq.spells.push(spell);
-    line.tokens.push({ ...spell, type: 'arg', nodeId: clause.id });
-    checkSpellName(ctx, line, spell);
+    const step = splitRank(ctx, line, clause.id, spell);
+    seq.spells.push(step);
+    checkSpellName(ctx, line, step);
   }
   return seq;
+}
+
+/**
+ * Splits a trailing `(Rank N)` off a spell argument. Returns the base name as the
+ * argument so validation and tooltips work on the real spell, with the rank recorded
+ * separately and its own token so it highlights distinctly.
+ */
+function splitRank(
+  ctx: Ctx, line: Line, nodeId: string, arg: TextSpan,
+): SpellArg {
+  const ranksSupported = FLAVOURS[ctx.flavour].features.spellRanks;
+  const match = RANK_SUFFIX.exec(arg.text);
+
+  if (!ranksSupported) {
+    // Porting a Classic macro to Midnight is a common mistake, and silently failing
+    // to match any spell is a confusing way to find out.
+    if (match) {
+      ctx.issue(
+        'info',
+        `Spell ranks were removed in modern World of Warcraft, so "${arg.text}" will not `
+        + `match a spell on ${FLAVOURS[ctx.flavour].shortLabel}. Drop the "(Rank ${match[1]})".`,
+        arg, line.number, { nodeId },
+      );
+    }
+    line.tokens.push({ ...arg, type: 'arg', nodeId });
+    return arg;
+  }
+
+  if (!match) {
+    line.tokens.push({ ...arg, type: 'arg', nodeId });
+    return arg;
+  }
+
+  const baseText = arg.text.slice(0, match.index).trimEnd();
+  const base: SpellArg = {
+    text: baseText,
+    start: arg.start,
+    end: arg.start + baseText.length,
+    rank: Number(match[1]),
+  };
+  line.tokens.push({ start: base.start, end: base.end, type: 'arg', nodeId });
+  line.tokens.push({ start: arg.start + match.index, end: arg.end, type: 'rank', nodeId });
+  return base;
 }
 
 /** Soft check only: info level, never an error. */

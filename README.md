@@ -40,33 +40,61 @@ No runtime dependencies. The build is a static site that can be hosted anywhere.
 
 ## Game versions
 
-| Flavour | Interface | Status |
-| --- | --- | --- |
-| Retail (Modern) | 120100 | Supported |
-| Forever (Classic+) | 16001 | **Provisional** |
+| Version | Flavour id | Interface | Spell ranks | Data build |
+| --- | --- | --- | --- | --- |
+| Midnight (Retail) | `retail` | 120100 | no | `12.1.0` |
+| Forever | `forever` | 16001 | no | `1.60.1` (pre-launch) |
+| Classic Era | `era` | 11509 | **yes** | `1.15.9` |
+
+The id `retail` is deliberately not renamed to `midnight`: permalinks, `localStorage` and
+the `spells.retail.json` filename all depend on it. Only the label changes.
 
 WoW: Forever launches 4 November 2026. It reports `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`
-and runs the modern macro engine over vanilla content, so **it shares Retail's macro
+and runs the modern macro engine over vanilla content, so **it shares Midnight's macro
 parser** — supporting it is a matter of tagging which conditionals are *meaningful*, not
-forking the grammar.
+forking the grammar. Its spell data comes from a pre-launch build and should be
+regenerated after launch.
 
-Conditionals carry an availability tag per flavour: `yes`, `no` ("parses, but can never be
-true here" — e.g. `[advflyable]`, since skyriding is a Dragonflight-era system), or
-`unknown` ("unverified"). A flavour tag never produces a hard error, only a warning or an
-info, because the published information about Forever is still mostly unofficial and the
-beta was still moving when this was written. Anything flavour-specific should be
-re-verified after launch.
+Classic Era is the one version that genuinely differs: **spell ranks**.
+`/cast Fireball(Rank 3)` is a core Classic technique and modern WoW has no concept of it,
+so the parser splits the rank off only where `features.spellRanks` is set in
+`src/flavours.ts`. On Midnight and Forever the parentheses stay part of the name — which
+is what the game does — and you get an info explaining why it will not match a spell.
+That is a real mistake people make porting Classic macros forward.
 
-Classic proper is not supported. It would be a genuine parser fork — spell ranks,
-different stance indexes — which is why the parser reads feature flags from
-`src/flavours.ts` rather than hardcoding behaviour.
+Conditionals carry an availability tag per flavour: `yes`, `no` ("parses, but can never
+be true here"), or `unknown` ("unverified"). A flavour tag never produces a hard error,
+only a warning or an info. Worked examples of each:
+
+- `[flyable]` is **no** on both Forever and Classic Era. Blizzard has said flying will
+  [never be in Forever](https://www.warcrafttavern.com/forever/news/flying-mounts-wont-exist-in-wow-forever/)
+  — deliberate design, not a launch omission — and vanilla Azeroth has none either.
+- `[spec:1]` is **no** on Classic Era: vanilla has no specialisations.
+- `[talent:1/1]` is the one place Classic Era is *better* supported than Midnight, where
+  row/column talents are legacy. It stays `unknown` on Forever, which runs a legacy
+  talent panel on the retail trait system.
+- `[group]`, `[known]` and `[channeling]` are **unknown** on Classic Era. Its client
+  backported much of the modern macro system so they may well work, but no reliable
+  source confirmed it. Tagged honestly rather than guessed — being wrong in the yes/no
+  direction would be worse than admitting the gap.
 
 ## Spell data
 
-`npm run data:spells` regenerates `src/data/spells.retail.json` from
-[wago.tools](https://wago.tools/db2) DB2 exports (no auth needed). The output is committed;
-the app never makes a network request. Downloads are cached in `.cache/`, so re-runs are
-cheap.
+`npm run data:spells` regenerates a dataset from [wago.tools](https://wago.tools/db2)
+DB2 exports (no auth needed). The output is committed; the app never makes a network
+request. Downloads are cached in `.cache/`, so re-runs are cheap. One command per version:
+
+```sh
+npm run data:spells                              # Midnight -> spells.retail.json
+npm run data:spells -- --product wow_cn_beta     # Forever  -> spells.forever.json
+npm run data:spells -- --product wow_classic_era # Era      -> spells.era.json
+```
+
+`wow_cn_beta` is where wago.tools files the 1.60.1 build line. The key is not obviously
+Forever-named, but the build line matches interface 16001, the spell ids are vanilla, and
+Skyriding and Dragonriding are absent — so it is Forever's data. `SpecializationSpells`
+does not exist on either Classic-line build; the script detects the 4xx and carries on,
+since vanilla has no specialisations anyway.
 
 `SpellName` on its own is every spell in the game — NPC abilities, internal triggers, test
 spells — 11 MB and 414,000 rows, useless for validation. So the script keeps only spells
@@ -114,6 +142,14 @@ game resolves `/cast Fireball` against *your* spellbook and we cannot know it.
 scaling curves and caster stats we do not have. Rendering them would show visible junk,
 and computing them would be frequently wrong. So the tooltip shows only facts that are
 true as written, and links to Wowhead for the rest.
+
+### Known limitation: rank metadata
+
+Each dataset holds one record per *name*, so where a name covers several ranks — 25.6% of
+Classic Era names are ambiguous, against 8.3% on Midnight — the tooltip shows one
+representative rank's cast time and cooldown, not the rank the macro asked for. Fixing it
+means pulling `Spell.db2`'s `NameSubtext_lang` and keying by spell id rather than name.
+The tooltip does flag the ambiguity rather than claiming certainty.
 
 ### Icons and privacy
 

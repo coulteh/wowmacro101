@@ -2,16 +2,16 @@
 //
 // WoW: Forever (interface 16001, build line 1.60.x) reports
 // WOW_PROJECT_ID == WOW_PROJECT_MAINLINE -- it is vanilla *content* running on the
-// *retail* engine, so it shares Retail's macro parser exactly. Supporting it is a
-// matter of tagging which conditionals are meaningful, not forking the parser.
+// *retail* engine, so it shares Retail's macro parser. Supporting it is a matter of
+// tagging which conditionals are meaningful.
 //
-// Classic proper would be a real parser fork (spell ranks, different stance indexes),
-// which is why the parser reads feature flags from here rather than hardcoding.
+// Classic Era is the genuine fork: spell ranks are live there and Retail has no concept
+// of them, which is what `features` exists for.
 
-export type FlavourId = 'retail' | 'forever';
+export type FlavourId = 'retail' | 'forever' | 'era';
 
 export interface FlavourFeatures {
-  /** Does `/cast Spell(Rank 3)` mean anything? Mainline dropped ranks; Classic kept them. */
+  /** Does `/cast Fireball(Rank 3)` mean anything? Mainline dropped ranks; Classic kept them. */
   spellRanks: boolean;
 }
 
@@ -20,33 +20,47 @@ export interface Flavour {
   label: string;
   shortLabel: string;
   interfaceVersion: number;
-  /** True while the flavour is unreleased/beta and our rules may be wrong. */
+  /** True while our rules for this flavour may be wrong; drives a louder banner. */
   provisional: boolean;
+  /** Shown under the header whenever present, provisional or not. */
   note?: string;
   features: FlavourFeatures;
 }
 
 export const FLAVOURS: Record<FlavourId, Flavour> = {
+  // The id stays 'retail' even though the label is the expansion name: permalinks,
+  // localStorage and the spells.retail.json filename all depend on it.
   retail: {
     id: 'retail',
-    label: 'Retail (Modern)',
-    shortLabel: 'Retail',
+    label: 'Midnight (Retail)',
+    shortLabel: 'Midnight',
     interfaceVersion: 120100,
     provisional: false,
     features: { spellRanks: false },
   },
   forever: {
     id: 'forever',
-    label: 'Forever (Classic+)',
+    label: 'Forever',
     shortLabel: 'Forever',
     interfaceVersion: 16001,
     provisional: true,
     note:
-      'Forever launches 4 Nov 2026 and runs the modern macro engine over vanilla content, ' +
-      'so the syntax matches Retail. Which conditionals are actually meaningful is still ' +
-      'being confirmed — treat flavour-specific notes as provisional. No spell data has ' +
-      'been published for its build yet, so spell icons and name checking are unavailable here.',
+      'Forever launches 4 Nov 2026 and runs the modern macro engine over vanilla content, '
+      + 'so the syntax matches Midnight. Spell data here comes from a pre-launch build and '
+      + 'will change — treat flavour-specific notes as provisional.',
     features: { spellRanks: false },
+  },
+  era: {
+    id: 'era',
+    label: 'Classic Era',
+    shortLabel: 'Classic Era',
+    interfaceVersion: 11509,
+    provisional: false,
+    note:
+      'Classic Era supports spell ranks, so Fireball(Rank 3) is meaningful here. A few '
+      + 'conditionals could not be confirmed against a reliable source and are marked '
+      + 'unverified rather than guessed at.',
+    features: { spellRanks: true },
   },
 };
 

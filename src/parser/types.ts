@@ -14,7 +14,7 @@ export interface TextSpan extends Span {
 
 export type TokenType =
   | 'comment' | 'meta' | 'command' | 'bracket' | 'cond-name' | 'cond-neg'
-  | 'cond-value' | 'punct' | 'unit' | 'sep' | 'arg' | 'reset'
+  | 'cond-value' | 'punct' | 'unit' | 'sep' | 'arg' | 'reset' | 'rank'
   | 'lua' | 'text' | 'bang' | 'unknown';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -63,9 +63,18 @@ export interface CondGroup extends Span {
   empty: boolean;
 }
 
+/**
+ * A spell name argument. `rank` is only ever set on flavours whose features include
+ * spellRanks -- on Midnight the "(Rank 3)" stays part of the name, which is exactly
+ * what the game does with it.
+ */
+export interface SpellArg extends TextSpan {
+  rank?: number;
+}
+
 export interface SequenceInfo {
   reset: (TextSpan & { parts: string[] }) | null;
-  spells: TextSpan[];
+  spells: SpellArg[];
 }
 
 export interface Clause extends Span {
@@ -73,7 +82,7 @@ export interface Clause extends Span {
   index: number;
   /** OR-ed together; each group's conditions are AND-ed. */
   groups: CondGroup[];
-  arg: TextSpan | null;
+  arg: SpellArg | null;
   /** `/cast !Spell` — do not toggle the aura off. */
   bang: boolean;
   sequence?: SequenceInfo;

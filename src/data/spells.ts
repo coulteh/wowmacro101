@@ -33,6 +33,8 @@ export type SpellRow = [string, number, number, number, number, number, number, 
 export interface SpellData {
   build: string;
   product: string;
+  /** Which flavour this dataset belongs to; matches the filename. */
+  flavour: string;
   generatedAt: string;
   sources: string[];
   count: number;

@@ -261,8 +261,11 @@ export const COMMANDS: CommandDef[] = [
     long: 'Leaves the current vehicle, if you are allowed to.',
     syntax: '/leavevehicle [canexitvehicle]',
     action: () => 'exit your vehicle',
-    availability: { forever: 'unknown' },
-    flavourNotes: { forever: 'Vehicles are a Wrath-era system; unconfirmed for Forever.' },
+    availability: { forever: 'unknown', era: 'no' },
+    flavourNotes: {
+      forever: 'Vehicles are a Wrath-era system; unconfirmed for Forever.',
+      era: 'Vehicles are a Wrath-era system.',
+    },
   },
 
   // --- Pet -----------------------------------------------------------------
@@ -315,6 +318,8 @@ export const COMMANDS: CommandDef[] = [
     long: 'Equips a set saved in the Equipment Manager.',
     syntax: '/equipset [nocombat] Healing',
     action: (a: string) => `equip the saved set "${a}"`,
+    availability: { era: 'no' },
+    flavourNotes: { era: 'The Equipment Manager arrived in Wrath.' },
   },
   {
     names: ['/click'],

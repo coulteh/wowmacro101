@@ -78,6 +78,8 @@ export const CONDITIONALS: ConditionalDef[] = [
       if (!ctx.values.length) return g !== 'none';
       return ctx.values.some((v) => (v.toLowerCase() === 'raid' ? g === 'raid' : g !== 'none'));
     },
+    availability: { era: 'unknown' },
+    flavourNotes: { era: 'Could not confirm [group] on Classic Era against a reliable source.' },
   },
 
   // --- Input ---------------------------------------------------------------
@@ -133,23 +135,32 @@ export const CONDITIONALS: ConditionalDef[] = [
     name: 'flying', category: 'Player', value: 'none', short: 'You are flying right now',
     desc: (_v, n) => `you are ${no(n)}currently flying`,
     test: (ctx) => ctx.state.flying,
-    availability: { forever: 'unknown' },
-    flavourNotes: { forever: 'Blizzard has not confirmed whether flying exists in Forever.' },
+    availability: { forever: 'no', era: 'no' },
+    flavourNotes: {
+      forever: 'Blizzard has said flying will never be in Forever — it is deliberate design, not a launch omission.',
+      era: 'There is no flying anywhere in vanilla Azeroth.',
+    },
   },
   {
     name: 'flyable', category: 'Player', value: 'none', short: 'Flying is allowed here',
     desc: (_v, n) => `flying is ${no(n)}possible in this zone`,
     note: 'This is about the zone, not about whether you are in the air — that is [flying].',
     test: (ctx) => ctx.state.flyable,
-    availability: { forever: 'unknown' },
-    flavourNotes: { forever: 'Blizzard has not confirmed whether flying exists in Forever.' },
+    availability: { forever: 'no', era: 'no' },
+    flavourNotes: {
+      forever: 'Blizzard has said flying will never be in Forever — it is deliberate design, not a launch omission.',
+      era: 'There is no flying anywhere in vanilla Azeroth.',
+    },
   },
   {
     name: 'advflyable', category: 'Player', value: 'none', short: 'Skyriding is allowed here',
     desc: (_v, n) => `skyriding (dynamic flight) is ${no(n)}usable here`,
     test: (ctx) => ctx.state.advflyable,
-    availability: { forever: 'no' },
-    flavourNotes: { forever: 'Skyriding is a Dragonflight-era system and has no place in vanilla content.' },
+    availability: { forever: 'no', era: 'no' },
+    flavourNotes: {
+      forever: 'Skyriding is a Dragonflight-era system and has no place in vanilla content.',
+      era: 'Skyriding is a Dragonflight-era system.',
+    },
   },
   {
     name: 'indoors', category: 'Player', value: 'none', short: 'You are indoors',
@@ -170,8 +181,11 @@ export const CONDITIONALS: ConditionalDef[] = [
     name: 'petbattle', category: 'Player', value: 'none', short: 'You are in a pet battle',
     desc: (_v, n) => `you are ${no(n)}in a pet battle`,
     test: (ctx) => ctx.state.petbattle,
-    availability: { forever: 'no' },
-    flavourNotes: { forever: 'Pet battles are a Mists-era system; vanilla content has none.' },
+    availability: { forever: 'no', era: 'no' },
+    flavourNotes: {
+      forever: 'Pet battles are a Mists-era system; vanilla content has none.',
+      era: 'Pet battles are a Mists-era system.',
+    },
   },
   {
     name: 'channeling', category: 'Player', value: 'optional',
@@ -181,6 +195,8 @@ export const CONDITIONALS: ConditionalDef[] = [
       : `you are ${no(n)}channeling something`),
     // We model "channeling something" but not which spell.
     test: (ctx) => (ctx.values.length ? 'unknown' : ctx.state.channeling),
+    availability: { era: 'unknown' },
+    flavourNotes: { era: 'Could not confirm [channeling] on Classic Era against a reliable source.' },
   },
   {
     name: 'known', category: 'Player', value: 'required',
@@ -188,6 +204,8 @@ export const CONDITIONALS: ConditionalDef[] = [
     desc: (v, n) => `you ${n ? 'do not know' : 'know'} ${or(v)}`,
     note: 'Takes a spell name or spell ID. Great for macros shared across specs.',
     test: () => 'unknown',
+    availability: { era: 'unknown' },
+    flavourNotes: { era: 'Could not confirm [known] on Classic Era against a reliable source.' },
   },
   {
     name: 'spec', category: 'Player', value: 'required', values: ['1', '2', '3', '4'],
@@ -195,8 +213,10 @@ export const CONDITIONALS: ConditionalDef[] = [
     short: 'Active specialisation',
     desc: (v, n) => `your active specialisation is ${no(n)}number ${or(v)}`,
     test: (ctx) => ctx.values.some((v) => Number(v) === ctx.state.spec),
+    availability: { era: 'no' },
     flavourNotes: {
       forever: 'Forever does have specialisations — the beta exposes new spec IDs via the retail trait system.',
+      era: 'Vanilla has no specialisations; talents are a row/column tree.',
     },
   },
   {
@@ -208,6 +228,7 @@ export const CONDITIONALS: ConditionalDef[] = [
     availability: { forever: 'unknown' },
     flavourNotes: {
       forever: "Forever runs its legacy talent panel on retail's C_Traits system; whether [talent:row/col] is wired up is unverified.",
+      era: 'This is the intended home for row/column talents — not legacy here.',
     },
   },
   {
@@ -271,36 +292,46 @@ export const CONDITIONALS: ConditionalDef[] = [
     name: 'overridebar', category: 'Bars', value: 'none', short: 'An override bar is showing',
     desc: (_v, n) => `an override action bar is ${no(n)}showing`,
     test: () => 'unknown',
+    availability: { era: 'no' },
+    flavourNotes: { era: 'Override bars arrived in Cataclysm.' },
   },
   {
     name: 'extrabar', category: 'Bars', value: 'none', short: 'The extra action button bar is showing',
     desc: (_v, n) => `the extra action bar is ${no(n)}showing`,
     test: () => 'unknown',
+    availability: { era: 'no' },
+    flavourNotes: { era: 'The extra action button arrived in Mists.' },
   },
   {
     name: 'possessbar', category: 'Bars', value: 'none', short: 'You are possessing something',
     desc: (_v, n) => `the possess bar is ${no(n)}showing (you are mind-controlling something)`,
     test: () => 'unknown',
-    availability: { forever: 'unknown' },
+    availability: { forever: 'unknown', era: 'no' },
+    flavourNotes: { era: 'The possess bar arrived with Wrath-era vehicles.' },
   },
   {
     name: 'vehicleui', category: 'Bars', value: 'none', short: 'You are in a vehicle UI',
     desc: (_v, n) => `you are ${no(n)}using a vehicle UI`,
     test: () => 'unknown',
-    availability: { forever: 'unknown' },
-    flavourNotes: { forever: 'Vehicles are a Wrath-era system. Forever is new content, so this may yet be used.' },
+    availability: { forever: 'unknown', era: 'no' },
+    flavourNotes: {
+      forever: 'Vehicles are a Wrath-era system. Forever is new content, so this may yet be used.',
+      era: 'Vehicles are a Wrath-era system.',
+    },
   },
   {
     name: 'unithasvehicleui', category: 'Bars', value: 'none', short: 'The unit has a vehicle UI',
     desc: (_v, n, u) => `${U(u)} is ${no(n)}in a vehicle with its own UI`,
     test: () => 'unknown',
-    availability: { forever: 'unknown' },
+    availability: { forever: 'unknown', era: 'no' },
+    flavourNotes: { era: 'Vehicles are a Wrath-era system.' },
   },
   {
     name: 'canexitvehicle', category: 'Bars', value: 'none', short: 'You can leave the vehicle',
     desc: (_v, n) => `you ${n ? 'cannot' : 'can'} exit your current vehicle`,
     test: () => 'unknown',
-    availability: { forever: 'unknown' },
+    availability: { forever: 'unknown', era: 'no' },
+    flavourNotes: { era: 'Vehicles are a Wrath-era system.' },
   },
 ];
 

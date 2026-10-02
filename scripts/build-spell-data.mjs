@@ -21,7 +21,10 @@
  * does not exist.
  */
 
-import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -32,6 +35,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE_DIR = join(ROOT, '.cache');
 
+/**
+ * wago.tools product keys mapped to our flavour ids. 'wow_cn_beta' is where the
+ * 1.60.1 (interface 16001) Forever build line is filed -- an odd key, but the build
+ * line, vanilla spell ids and absent Skyriding all match.
+ */
+const PRODUCT_FLAVOUR = {
+  wow: 'retail',
+  wow_cn_beta: 'forever',
+  wow_classic_era: 'era',
+};
+
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
@@ -39,13 +53,19 @@ function arg(name, fallback) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** wago.tools intermittently 504s, so every request gets a few patient retries. */
-async function fetchWithRetry(url, { attempts = 4, label = url } = {}) {
+/**
+ * wago.tools intermittently 504s, so every request gets a few patient retries.
+ *
+ * A table that does not exist for a build answers 4xx, which is not worth retrying --
+ * with `allowMissing` we return null immediately so the caller can carry on.
+ */
+async function fetchWithRetry(url, { attempts = 4, label = url, allowMissing = false } = {}) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await fetch(url);
       if (res.ok) return res;
+      if (allowMissing && res.status >= 400 && res.status < 500) return null;
       lastError = new Error(`HTTP ${res.status}`);
     } catch (error) {
       lastError = error;
@@ -70,19 +90,41 @@ async function resolveBuild(product) {
   return list[0].version;
 }
 
-async function fetchTable(table, build) {
+/**
+ * wago.tools answers a missing table with HTTP 200 and a JSON error body, so the status
+ * code is not enough -- we have to look at the content. Returns null when the table does
+ * not exist for this build (SpecializationSpells on the classic lines, for example).
+ */
+function looksLikeMissingTable(path) {
+  const head = readFileSync(path, { encoding: 'utf8', flag: 'r' }).slice(0, 200);
+  return head.trimStart().startsWith('{') && /"errors?"\s*:/.test(head);
+}
+
+async function fetchTable(table, build, { required = true } = {}) {
   mkdirSync(CACHE_DIR, { recursive: true });
   const target = join(CACHE_DIR, `${table}-${build}.csv`);
-  if (existsSync(target)) {
+
+  if (!existsSync(target)) {
+    const url = `https://wago.tools/db2/${table}/csv?build=${build}`;
+    console.log(`  ${table}: downloading ${url}`);
+    const res = await fetchWithRetry(url, { label: table, allowMissing: !required });
+    if (!res) {
+      console.log(`  ${table}: not present for this build, skipping`);
+      return null;
+    }
+    const partial = `${target}.partial`;
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(partial));
+    renameSync(partial, target);
+  } else {
     console.log(`  ${table}: using cached ${target}`);
-    return target;
   }
-  const url = `https://wago.tools/db2/${table}/csv?build=${build}`;
-  console.log(`  ${table}: downloading ${url}`);
-  const res = await fetchWithRetry(url, { label: table });
-  const partial = `${target}.partial`;
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(partial));
-  renameSync(partial, target);
+
+  if (looksLikeMissingTable(target)) {
+    rmSync(target);
+    if (required) throw new Error(`${table} does not exist for build ${build}`);
+    console.log(`  ${table}: not present for this build, skipping`);
+    return null;
+  }
   return target;
 }
 
@@ -310,7 +352,13 @@ async function collectNames(path, wanted) {
 async function main() {
   const product = arg('product', 'wow');
   const build = arg('build') ?? (await resolveBuild(product));
-  const out = arg('out', join(ROOT, 'src', 'data', `spells.${product === 'wow' ? 'retail' : product}.json`));
+  const flavour = PRODUCT_FLAVOUR[product];
+  if (!flavour) {
+    throw new Error(
+      `Unknown product "${product}". Known: ${Object.keys(PRODUCT_FLAVOUR).join(', ')}`,
+    );
+  }
+  const out = arg('out', join(ROOT, 'src', 'data', `spells.${flavour}.json`));
 
   console.log(`Building spell data for ${product} ${build}`);
 
@@ -318,7 +366,8 @@ async function main() {
   const wanted = new Set();
   const learned = new Set();
   for (const source of SPELL_ID_SOURCES) {
-    const path = await fetchTable(source.table, build);
+    const path = await fetchTable(source.table, build, { required: false });
+    if (!path) continue;
     const ids = await collectSpellIds(path, source.table, source.columns, new Set());
     const before = wanted.size;
     for (const id of ids) {
@@ -388,6 +437,7 @@ async function main() {
   const payload = {
     build,
     product,
+    flavour,
     generatedAt: new Date().toISOString(),
     source: 'https://wago.tools/db2',
     sources: SPELL_ID_SOURCES.map((entry) => entry.table),

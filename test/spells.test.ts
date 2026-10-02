@@ -2,6 +2,8 @@ import { gzipSync } from 'node:zlib';
 import { readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import spellData from '../src/data/spells.retail.json';
+import eraData from '../src/data/spells.era.json';
+import foreverData from '../src/data/spells.forever.json';
 import {
   createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl, wowheadUrl,
   ICON_BASE, type SpellData,
@@ -11,6 +13,14 @@ import { parseMacro } from '../src/parser/parser';
 
 const data = spellData as unknown as SpellData;
 const index = createSpellIndex(data);
+
+const era = createSpellIndex(eraData as unknown as SpellData);
+const forever = createSpellIndex(foreverData as unknown as SpellData);
+const ALL = [
+  ['retail', data, index],
+  ['era', eraData as unknown as SpellData, era],
+  ['forever', foreverData as unknown as SpellData, forever],
+] as const;
 
 describe('bundled spell dataset', () => {
   it('is populated and labelled with its build', () => {
@@ -122,5 +132,56 @@ describe('icon and link helpers', () => {
     expect(formatCooldown(0)).toBe('No cooldown');
     expect(formatCooldown(25_000)).toBe('25 sec cooldown');
     expect(formatCooldown(120_000)).toBe('2 min cooldown');
+  });
+});
+
+
+describe('every flavour dataset', () => {
+  it.each(ALL)('%s is populated, labelled and carries icons', (flavour, raw, idx) => {
+    expect(raw.flavour).toBe(flavour);
+    expect(raw.build).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    expect(idx.count).toBeGreaterThan(2000);
+    const withIcon = raw.spells.filter((row) => row[2] >= 0).length;
+    expect(withIcon / raw.spells.length).toBeGreaterThan(0.95);
+  });
+
+  it.each(ALL)('%s resolves the vanilla core every version shares', (_flavour, _raw, idx) => {
+    // Real ids, verified against each build. Mortal Strike is 12294 everywhere -- the
+    // 9347 in the raw SpellName table is a non-player variant.
+    expect(idx.lookup('Fireball')!.id).toBe(133);
+    expect(idx.lookup('Mortal Strike')!.id).toBe(12294);
+    expect(idx.lookup('Flash Heal')!.id).toBe(2061);
+    expect(idx.lookup('Counterspell')!.id).toBe(2139);
+  });
+
+  it('draws from genuinely different builds, not one source relabelled', () => {
+    expect(data.build.startsWith('12.')).toBe(true);
+    expect((eraData as unknown as SpellData).build.startsWith('1.15.')).toBe(true);
+    expect((foreverData as unknown as SpellData).build.startsWith('1.60.')).toBe(true);
+
+    // Steady Shot is a Burning Crusade hunter ability: present on Midnight, absent
+    // from both vanilla-era spellbooks.
+    expect(index.has('Steady Shot')).toBe(true);
+    expect(era.has('Steady Shot')).toBe(false);
+    expect(forever.has('Steady Shot')).toBe(false);
+  });
+
+  it('shows more ambiguity on the rank-bearing versions', () => {
+    // Ranks share a spell name, so Classic-line datasets collapse many ids per name.
+    const rate = (raw: SpellData) =>
+      raw.spells.filter((row) => row[7] === 1).length / raw.spells.length;
+    expect(rate(eraData as unknown as SpellData))
+      .toBeGreaterThan(rate(data));
+    expect(era.lookup('Fireball')!.ambiguous).toBe(true);
+  });
+
+  it('keeps each dataset small enough to be a lazy chunk', () => {
+    for (const file of ['era', 'forever'] as const) {
+      const path = `src/data/spells.${file}.json`;
+      const gzipped = gzipSync(readFileSync(path)).length;
+      console.log(`    spells.${file}.json: ${(statSync(path).size / 1024).toFixed(0)} kB raw, `
+        + `${(gzipped / 1024).toFixed(0)} kB gzipped`);
+      expect(gzipped).toBeLessThan(200 * 1024);
+    }
   });
 });
