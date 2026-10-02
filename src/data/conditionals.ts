@@ -31,14 +31,15 @@ export const CONDITIONALS: ConditionalDef[] = [
   {
     name: 'help', category: 'Unit', value: 'none',
     short: 'Unit is friendly',
-    desc: (_v, n, u) => `${U(u)} ${n ? 'cannot' : 'can'} receive your helpful spells (is friendly)`,
+    desc: (_v, n, u) =>
+      `${U(u)} ${n ? 'cannot' : 'can'} receive your helpful spells (is ${n ? 'not ' : ''}friendly)`,
     note: 'Checks "can I help this unit", not just faction. Neutral NPCs are neither [help] nor [harm].',
     test: (ctx) => onUnit(ctx, (u) => u.exists && u.reaction === 'friendly'),
   },
   {
     name: 'harm', category: 'Unit', value: 'none',
     short: 'Unit is hostile',
-    desc: (_v, n, u) => `${U(u)} is ${no(n)}attackable (hostile)`,
+    desc: (_v, n, u) => `${U(u)} is ${no(n)}attackable (${n ? 'not hostile' : 'hostile'})`,
     note: 'Pair with nodead so you do not keep targeting corpses: [harm,nodead].',
     test: (ctx) => onUnit(ctx, (u) => u.exists && u.reaction === 'hostile'),
   },
@@ -304,7 +305,8 @@ export const CONDITIONALS: ConditionalDef[] = [
   },
   {
     name: 'possessbar', category: 'Bars', value: 'none', short: 'You are possessing something',
-    desc: (_v, n) => `the possess bar is ${no(n)}showing (you are mind-controlling something)`,
+    desc: (_v, n) =>
+      `the possess bar is ${no(n)}showing (you are ${no(n)}mind-controlling something)`,
     test: () => 'unknown',
     availability: { forever: 'unknown', era: 'no' },
     flavourNotes: { era: 'The possess bar arrived with Wrath-era vehicles.' },

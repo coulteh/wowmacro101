@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMacro } from '../src/parser/parser';
+import { CONDITIONALS } from '../src/data/conditionals';
 import { explainMacro, type ExplRow } from '../src/explain/explain';
 
 function explain(src: string, flavour: 'retail' | 'forever' = 'retail') {
@@ -60,9 +61,14 @@ describe('condition rows', () => {
     ]);
   });
 
-  it('negates helpfully rather than mechanically', () => {
+  it('negates the parenthetical too, not just the verb', () => {
+    // This assertion used to enshrine "cannot receive your helpful spells (is
+    // friendly)" -- negated verb, un-negated gloss, contradicting itself.
     expect(texts(explain('/cast [nohelp] Smite').rows)).toContain(
-      'Your current target cannot receive your helpful spells (is friendly).',
+      'Your current target cannot receive your helpful spells (is not friendly).',
+    );
+    expect(texts(explain('/cast [noharm] Smite').rows)).toContain(
+      'Your current target is not attackable (not hostile).',
     );
   });
 
@@ -137,5 +143,41 @@ describe('summary', () => {
 
   it('says something useful when empty', () => {
     expect(explain('').summary).toMatch(/Start typing/);
+  });
+});
+
+describe('description wording holds up under negation', () => {
+  /**
+   * Parentheticals that gloss a *term* rather than assert a truth, so they are
+   * correct to stay identical when negated: "(1=left, 2=right...)" is a legend,
+   * "(is friendly)" is a claim. Anything new that needs listing here should be a
+   * deliberate decision, not an oversight.
+   */
+  const TERM_GLOSSES = new Set(['btn', 'resting', 'advflyable', 'stance']);
+
+  it('never lets a positive gloss survive into the negative', () => {
+    const parenthetical = (text: string) => /\(([^)]*)\)/.exec(text)?.[1] ?? null;
+    const offenders: string[] = [];
+
+    for (const def of CONDITIONALS) {
+      if (TERM_GLOSSES.has(def.name)) continue;
+      const values = def.values?.slice(0, 1) ?? [];
+      const positive = parenthetical(def.desc(values, false, 'your current target'));
+      const negative = parenthetical(def.desc(values, true, 'your current target'));
+      if (positive && negative && positive === negative) {
+        offenders.push(`[no${def.name}] -> "${def.desc(values, true, 'your current target')}"`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('actually changes the sentence when negated', () => {
+    for (const def of CONDITIONALS) {
+      const values = def.values?.slice(0, 1) ?? [];
+      const positive = def.desc(values, false, 'your current target');
+      const negative = def.desc(values, true, 'your current target');
+      expect(negative, `[${def.name}] reads identically negated`).not.toBe(positive);
+      expect(negative.length, `[${def.name}] has an empty negative form`).toBeGreaterThan(0);
+    }
   });
 });
