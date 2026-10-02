@@ -532,3 +532,9 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
   font-size: 11px;
   color: var(--text-faint);
 }
+
+.spell-tip-class {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--tok-cond);
+}

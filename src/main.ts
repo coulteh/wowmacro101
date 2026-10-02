@@ -1,5 +1,6 @@
 import './styles.css';
 
+import { ANY_CLASS, isClassAvailable } from './data/classes';
 import { EXAMPLES } from './data/examples';
 import { loadSpellIndex, type SpellIndex } from './data/spells';
 import { describeAction, explainMacro } from './explain/explain';
@@ -37,6 +38,8 @@ const flavourNote = el<HTMLParagraphElement>('flavour-note');
 interface AppState {
   macro: string;
   flavour: FlavourId;
+  /** ANY_CLASS means no class filtering. Persisted, unlike the Situation toggles. */
+  classId: number;
   sim: SimState;
   tab: RefTab;
   query: string;
@@ -45,6 +48,7 @@ interface AppState {
 const state: AppState = {
   macro: EXAMPLES[1].macro,
   flavour: DEFAULT_FLAVOUR,
+  classId: ANY_CLASS,
   sim: defaultSimState(),
   tab: 'conditionals',
   query: '',
@@ -58,7 +62,7 @@ let spells: SpellIndex | null = null;
 // --- Rendering -------------------------------------------------------------
 
 function update(): void {
-  ast = parseMacro(state.macro, state.flavour, { spells });
+  ast = parseMacro(state.macro, state.flavour, { spells, classId: state.classId });
   highlight.innerHTML = highlightHtml(ast);
   gutter.innerHTML = ast.lines.map((_, i) => `<div>${i + 1}</div>`).join('');
   renderMeter();
@@ -129,7 +133,7 @@ function renderRef(): void {
 }
 
 function renderSimPanel(): void {
-  simEl.innerHTML = renderSimulator(state.sim);
+  simEl.innerHTML = renderSimulator(state.sim, state.flavour, state.classId);
 }
 
 function renderFlavourNote(): void {
@@ -198,7 +202,9 @@ function highlightNode(nodeId: string | null): void {
 
 function persist(): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ macro: state.macro, flavour: state.flavour }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      macro: state.macro, flavour: state.flavour, classId: state.classId,
+    }));
   } catch {
     // Private browsing and the like — not worth bothering the user about.
   }
@@ -209,6 +215,7 @@ function restore(): void {
   if (fromUrl) {
     state.macro = fromUrl.macro;
     state.flavour = fromUrl.flavour;
+    state.classId = fromUrl.classId;
     return;
   }
   try {
@@ -217,6 +224,9 @@ function restore(): void {
     const parsed = JSON.parse(saved) as Partial<AppState>;
     if (typeof parsed.macro === 'string') state.macro = parsed.macro;
     if (parsed.flavour && parsed.flavour in FLAVOURS) state.flavour = parsed.flavour;
+    if (typeof parsed.classId === 'number' && isClassAvailable(state.flavour, parsed.classId)) {
+      state.classId = parsed.classId;
+    }
   } catch {
     // Corrupt saved state is not worth recovering from.
   }
@@ -257,8 +267,12 @@ function bind(): void {
 
   flavourSelect.addEventListener('change', () => {
     state.flavour = flavourSelect.value as FlavourId;
+    // A class the new flavour does not have would leave the dropdown showing a value
+    // it no longer offers.
+    if (!isClassAvailable(state.flavour, state.classId)) state.classId = ANY_CLASS;
     renderFlavourNote();
     renderRef();
+    renderSimPanel();
     update();
     void loadSpells();
   });
@@ -309,7 +323,9 @@ function bind(): void {
   });
 
   el<HTMLButtonElement>('share').addEventListener('click', (event) => {
-    const hash = writePermalink({ macro: state.macro, flavour: state.flavour });
+    const hash = writePermalink({
+      macro: state.macro, flavour: state.flavour, classId: state.classId,
+    });
     history.replaceState(null, '', hash);
     void copy(location.href, event.currentTarget as HTMLButtonElement, 'Link copied');
   });
@@ -323,9 +339,11 @@ function bind(): void {
     const link = readPermalink(location.hash);
     if (!link) return;
     state.flavour = link.flavour;
+    state.classId = link.classId;
     flavourSelect.value = link.flavour;
     renderFlavourNote();
     renderRef();
+    renderSimPanel();
     setMacro(link.macro);
   });
 }
@@ -334,6 +352,12 @@ function onSimChange(event: Event): void {
   const target = event.target as HTMLInputElement | HTMLSelectElement;
   const path = target.dataset.path;
   if (!path) return;
+  // Class is app state, not simulated state -- see renderCharacter.
+  if (path === 'class') {
+    state.classId = Number(target.value) || ANY_CLASS;
+    update();
+    return;
+  }
   const raw = target instanceof HTMLInputElement && target.type === 'checkbox'
     ? target.checked
     : target.value;

@@ -401,3 +401,82 @@ describe('Classic Era conditionals', () => {
     expect(infos(ast)[0].message).toMatch(/Unverified on Classic Era/);
   });
 });
+
+describe('class mismatch warnings', () => {
+  const WARRIOR = 1;
+  const PALADIN = 2;
+
+  // A stand-in index so these tests do not depend on the generated dataset.
+  const index = {
+    build: 'test',
+    count: 3,
+    has: (name: string) => ['consecration', 'mortal strike', 'mining'].includes(name.trim().toLowerCase()),
+    lookup: (name: string) => {
+      const key = name.trim().toLowerCase();
+      const base = { icon: null, castMs: 0, rangeYd: 0, cooldownMs: 0, gcdMs: 0, ambiguous: false };
+      if (key === 'consecration') {
+        return { ...base, name: 'Consecration', id: 26573, classMask: 0b10, classes: ['Paladin'] };
+      }
+      if (key === 'mortal strike') {
+        return { ...base, name: 'Mortal Strike', id: 12294, classMask: 0b1, classes: ['Warrior'] };
+      }
+      if (key === 'mining') {
+        return { ...base, name: 'Mining', id: 2575, classMask: 0, classes: [] };
+      }
+      return null;
+    },
+  };
+
+  it('warns when the spell belongs to another class', () => {
+    const ast = parseMacro('/cast Consecration', 'retail', { spells: index, classId: WARRIOR });
+    const warning = warnings(ast)[0];
+    expect(warning.message).toBe('Consecration is a Paladin ability. Your class is set to Warrior.');
+    expect(errors(ast)).toHaveLength(0);
+  });
+
+  it('says nothing when the spell is yours', () => {
+    expect(parseMacro('/cast Consecration', 'retail', { spells: index, classId: PALADIN }).issues)
+      .toHaveLength(0);
+    expect(parseMacro('/cast Mortal Strike', 'retail', { spells: index, classId: WARRIOR }).issues)
+      .toHaveLength(0);
+  });
+
+  it('is silent with no class selected', () => {
+    expect(parseMacro('/cast Consecration', 'retail', { spells: index }).issues).toHaveLength(0);
+    expect(parseMacro('/cast Consecration', 'retail', { spells: index, classId: 0 }).issues)
+      .toHaveLength(0);
+  });
+
+  it('never warns about a spell with no class data', () => {
+    // Professions and items have no owner; "unknown" must not read as "not yours".
+    expect(parseMacro('/cast Mining', 'retail', { spells: index, classId: WARRIOR }).issues)
+      .toHaveLength(0);
+  });
+
+  it('cannot warn without a dataset at all', () => {
+    expect(parseMacro('/cast Consecration', 'retail', { classId: WARRIOR }).issues).toHaveLength(0);
+  });
+
+  it('checks castsequence steps and #showtooltip too', () => {
+    const seq = parseMacro('/castsequence Mortal Strike, Consecration', 'retail',
+      { spells: index, classId: WARRIOR });
+    expect(warnings(seq).map((w) => w.message))
+      .toEqual(['Consecration is a Paladin ability. Your class is set to Warrior.']);
+
+    const meta = parseMacro('#showtooltip Consecration', 'retail', { spells: index, classId: WARRIOR });
+    expect(warnings(meta)).toHaveLength(1);
+  });
+
+  it('gets the article right for Evoker', () => {
+    const evoker = {
+      ...index,
+      has: () => true,
+      lookup: () => ({
+        name: 'Disintegrate', id: 356995, icon: null, castMs: 0, rangeYd: 0,
+        cooldownMs: 0, gcdMs: 0, ambiguous: false, classMask: 1 << 12, classes: ['Evoker'],
+      }),
+    };
+    expect(parseMacro('/cast Disintegrate', 'retail', { spells: evoker, classId: WARRIOR }).issues[0].message)
+      .toMatch(/is an Evoker ability/);
+  });
+});

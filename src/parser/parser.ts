@@ -8,7 +8,8 @@
 // into the AST is clearer, and the highlight tokens fall out of the same walk.
 
 import { lookupCommand, allCommandNames, METACOMMANDS } from '../data/commands';
-import type { SpellIndex } from '../data/spells';
+import { ANY_CLASS, className } from '../data/classes';
+import { belongsToClass, type SpellIndex } from '../data/spells';
 import { lookupConditional, allConditionalNames, suggest } from '../data/conditionals';
 import { isValidUnit, UNIT_TOKENS } from '../data/units';
 import { DEFAULT_FLAVOUR, FLAVOURS, availabilityOf, type FlavourId } from '../flavours';
@@ -32,6 +33,8 @@ const CASTING_COMMANDS = new Set(['/cast', '/spell', '/castsequence', '/castrand
 export interface ParseOptions {
   /** Optional bundled spell list. Absent means no spell-name hints at all. */
   spells?: SpellIndex | null;
+  /** Selected class. ANY_CLASS (0) or omitted means no class checking. */
+  classId?: number;
 }
 
 class Ctx {
@@ -41,6 +44,7 @@ class Ctx {
     readonly source: string,
     readonly flavour: FlavourId,
     readonly spells: SpellIndex | null = null,
+    readonly classId: number = ANY_CLASS,
   ) {}
 
   id(prefix: string): string {
@@ -79,7 +83,7 @@ export function parseMacro(
   flavour: FlavourId = DEFAULT_FLAVOUR,
   options: ParseOptions = {},
 ): MacroAst {
-  const ctx = new Ctx(source, flavour, options.spells ?? null);
+  const ctx = new Ctx(source, flavour, options.spells ?? null, options.classId ?? ANY_CLASS);
   const lines: Line[] = [];
 
   let offset = 0;
@@ -284,7 +288,10 @@ function parseClause(
     } else {
       clause.arg = splitRank(ctx, line, clause.id, raw);
       const checkable = line.kind === 'meta' || (cmd && SPELL_NAME_COMMANDS.has(cmd));
-      if (checkable) checkSpellName(ctx, line, clause.arg);
+      if (checkable) {
+        checkSpellName(ctx, line, clause.arg);
+        checkSpellClass(ctx, line, clause.arg);
+      }
     }
   }
 
@@ -461,6 +468,7 @@ function parseSequence(ctx: Ctx, line: Line, clause: Clause, arg: TextSpan): Seq
     const step = splitRank(ctx, line, clause.id, spell);
     seq.spells.push(step);
     checkSpellName(ctx, line, step);
+    checkSpellClass(ctx, line, step);
   }
   return seq;
 }
@@ -506,6 +514,26 @@ function splitRank(
   line.tokens.push({ start: base.start, end: base.end, type: 'arg', nodeId });
   line.tokens.push({ start: arg.start + match.index, end: arg.end, type: 'rank', nodeId });
   return base;
+}
+
+/**
+ * Warns when a spell definitively belongs to other classes.
+ *
+ * Unlike an unrecognised name this is something we know rather than guess, so it is a
+ * warning rather than an info -- and it cannot false-positive, because a spell with no
+ * class data returns 'unknown' and says nothing.
+ */
+function checkSpellClass(ctx: Ctx, line: Line, span: TextSpan): void {
+  if (!ctx.spells || ctx.classId === ANY_CLASS) return;
+  const spell = ctx.spells.lookup(span.text.trim());
+  if (!spell || belongsToClass(spell, ctx.classId) !== false) return;
+  const owners = spell.classes.join(' or ');
+  ctx.issue(
+    'warning',
+    `${spell.name} is ${/^[AEIOU]/i.test(owners) ? 'an' : 'a'} ${owners} ability. `
+    + `Your class is set to ${className(ctx.classId) ?? 'something else'}.`,
+    span, line.number,
+  );
 }
 
 /** Soft check only: info level, never an error. */

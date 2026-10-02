@@ -42,12 +42,16 @@ function render(spell: SpellRecord, viaKeyboard: boolean): string {
     ? `<img class="spell-tip-icon" src="${iconUrl(spell.icon, 56)}" alt="" width="40" height="40"
          onerror="this.style.visibility='hidden'">`
     : '';
+  // Shown whenever we know it, not only on a mismatch: it informs rather than scolds.
+  const owners = spell.classes.length
+    ? `<p class="spell-tip-class">${escapeHtml(spell.classes.join(' / '))} ability</p>`
+    : '';
   const ambiguous = spell.ambiguous
     ? `<p class="spell-tip-note">This name matches more than one spell. Showing the most
          likely one — the game picks whichever is in your spellbook.</p>`
     : '';
   return `
-    <div class="spell-tip-head">${icon}<strong>${escapeHtml(spell.name)}</strong></div>
+    <div class="spell-tip-head">${icon}<div><strong>${escapeHtml(spell.name)}</strong>${owners}</div></div>
     <dl class="spell-tip-facts">
       <div><dt>Cast</dt><dd>${escapeHtml(formatCastTime(spell.castMs))}</dd></div>
       <div><dt>Range</dt><dd>${escapeHtml(formatRange(spell.rangeYd))}</dd></div>

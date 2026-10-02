@@ -14,8 +14,12 @@ new player as `(?<=\b)`, and the in-game macro editor gives you no feedback what
   plain-English line. Hover a row to light up the matching text; move the caret and the
   matching row highlights back.
 - **Real spell identity.** Spells show their actual in-game icon, and hovering (or
-  tab-focusing) one gives cast time, range, cooldown, spell id and a link to the full
-  Wowhead tooltip.
+  tab-focusing) one gives cast time, range, cooldown, spell id, the owning class and a
+  link to the full Wowhead tooltip.
+- **Class awareness.** Pick your class in the Situation panel and a macro reaching for
+  someone else's ability is called out: *"Consecration is a Paladin ability. Your class is
+  set to Warrior."* Class-level only — `Mortal Strike` is an Arms talent but any Warrior
+  gets a clean tooltip for it.
 - **Situation simulator.** Toggle combat, modifiers, forms, and what each unit slot looks
   like. The explanation then marks each clause *runs* / *skipped* / *might run* / *not
   reached*, states the concrete outcome including which unit it landed on, and marks
@@ -90,6 +94,11 @@ npm run data:spells -- --product wow_cn_beta     # Forever  -> spells.forever.js
 npm run data:spells -- --product wow_classic_era # Era      -> spells.era.json
 ```
 
+One parsing subtlety worth knowing if you extend the script: a quoted DB2 field can
+contain newlines (`ChrSpecialization.Description_lang` does), so `readCsv` accumulates
+lines until the quotes balance. Parsing line-by-line turned that table's 61 records into
+140 broken ones and silently corrupted every spec-to-class lookup.
+
 `wow_cn_beta` is where wago.tools files the 1.60.1 build line. The key is not obviously
 Forever-named, but the build line matches interface 16001, the spell ids are vanilla, and
 Skyriding and Dragonriding are absent — so it is Forever's data. `SpecializationSpells`
@@ -142,6 +151,43 @@ game resolves `/cast Fireball` against *your* spellbook and we cannot know it.
 scaling curves and caster stats we do not have. Rendering them would show visible junk,
 and computing them would be frequently wrong. So the tooltip shows only facts that are
 true as written, and links to Wowhead for the rest.
+
+### Class ownership
+
+Class comes from a union of four sources, because no single one is enough:
+
+| Source | Covers |
+| --- | --- |
+| `SkillLineAbility.ClassMask` | class-restricted abilities |
+| `SkillRaceClassInfo` | the class mask of a whole skill line |
+| `SpecializationSpells` → `ChrSpecialization` | baseline spec abilities |
+| `TraitDefinition` → `TraitNodeEntry` → `TraitNodeXTraitNodeEntry` → `TraitNode` → `TraitTreeLoadout` | the talent trees |
+
+**The trait chain is not optional on Midnight.** Without it coverage is 6% and
+`Mortal Strike`, `Rejuvenation` and `Fireball` have no owner at all, because modern class
+abilities are granted through talents rather than skill lines. With it, coverage is 21.5%
+and every class resolves, Evoker and Demon Hunter included.
+
+Class-specific share of each dataset — **floors to catch a broken join, not targets**:
+
+| | class-specific | the rest |
+| --- | --- | --- |
+| Midnight | 21.5% | professions, mounts, items, quest spells |
+| Classic Era | 34.9% | as above |
+| Forever | 24.2% | as above |
+
+Two normalisations happen at read time, in `createSpellIndex`:
+
+- A mask covering **every** class for that flavour becomes "no class". Classic Era tags
+  professions with all nine, which would otherwise make Mining a nine-class ability.
+- Bits are masked against the flavour's known class list, because Classic-line builds
+  carry a Death Knight bit that vanilla has no business with. This is also why
+  `src/data/classes.ts` hardcodes which classes each flavour has rather than deriving it.
+
+The mask for a name is the **union across every same-named candidate**, so a name shared
+by two classes never warns for either. That direction is deliberate: under-warning beats
+falsely telling someone their own spell is not theirs. The warning only ever fires when
+the class is positively known and does not match.
 
 ### Known limitation: rank metadata
 

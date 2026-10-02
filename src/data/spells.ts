@@ -4,6 +4,7 @@
 // level and never as an error. Being confidently wrong about a spell someone actually
 // has is worse than saying nothing at all.
 
+import { classBit, classNames, maskHasClass, ANY_CLASS, CLASSES_BY_FLAVOUR } from './classes';
 import type { FlavourId } from '../flavours';
 
 /**
@@ -27,8 +28,13 @@ export function wowheadUrl(id: number): string {
   return `https://www.wowhead.com/spell=${id}`;
 }
 
-/** name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, ambiguous */
-export type SpellRow = [string, number, number, number, number, number, number, number];
+/**
+ * name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, ambiguous,
+ * classMask (bit 0 = Warrior ... bit 12 = Evoker; 0 = not class-specific)
+ */
+export type SpellRow = [
+  string, number, number, number, number, number, number, number, number,
+];
 
 export interface SpellData {
   build: string;
@@ -52,6 +58,10 @@ export interface SpellRecord {
   gcdMs: number;
   /** The name maps to more than one spell id; this is the most likely one. */
   ambiguous: boolean;
+  /** Bitmask of owning classes; 0 means not class-specific or simply unknown. */
+  classMask: number;
+  /** Owning class names, empty when unknown. */
+  classes: string[];
 }
 
 export interface SpellIndex {
@@ -65,7 +75,23 @@ const normalise = (name: string) => name.trim().toLowerCase();
 
 export function createSpellIndex(data: SpellData): SpellIndex {
   const byName = new Map<string, SpellRecord>();
-  for (const [name, id, iconIndex, castMs, rangeYd, cooldownMs, gcdMs, ambiguous] of data.spells) {
+
+  // Bits for the classes this flavour actually has. Classic-line data carries a Death
+  // Knight bit that vanilla has no business with, so masking against the known list
+  // both drops that and lets us recognise an "every class" mask.
+  const flavourMask = (CLASSES_BY_FLAVOUR[data.flavour as FlavourId] ?? [])
+    .reduce((mask, id) => mask | classBit(id), 0);
+
+  const ownership = (raw: number): number => {
+    const mask = raw & flavourMask;
+    // Available to every class means it is not a class ability at all -- Classic Era
+    // tags professions with all nine, which would otherwise list nine classes.
+    return flavourMask && mask === flavourMask ? 0 : mask;
+  };
+  for (const row of data.spells) {
+    const [name, id, iconIndex, castMs, rangeYd, cooldownMs, gcdMs, ambiguous] = row;
+    // Tolerate a dataset generated before the class column existed.
+    const classMask = ownership(row[8] ?? 0);
     byName.set(normalise(name), {
       name,
       id,
@@ -75,6 +101,8 @@ export function createSpellIndex(data: SpellData): SpellIndex {
       cooldownMs,
       gcdMs,
       ambiguous: ambiguous === 1,
+      classMask,
+      classes: classNames(classMask),
     });
   }
   return {
@@ -130,4 +158,18 @@ export function formatCooldown(ms: number): string {
   if (!ms) return 'No cooldown';
   if (ms < 60_000) return `${trim(ms / 1000)} sec cooldown`;
   return `${trim(ms / 60_000)} min cooldown`;
+}
+
+
+/**
+ * Does this spell belong to the given class?
+ *
+ * Tri-state on purpose, matching the simulator: most spells carry no class data at all
+ * (professions, mounts, quest items), and "we don't know" must never be presented as
+ * "not yours".
+ */
+export function belongsToClass(spell: SpellRecord, classId: number): boolean | 'unknown' {
+  if (classId === ANY_CLASS) return 'unknown';
+  if (!spell.classMask) return 'unknown';
+  return maskHasClass(spell.classMask, classId);
 }

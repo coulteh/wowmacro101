@@ -1,5 +1,7 @@
 // The "situation" panel: the macro equivalent of regex101's test string.
 
+import { ANY_CLASS, classesFor } from '../data/classes';
+import type { FlavourId } from '../flavours';
 import type { SimState } from '../sim/state';
 import { escapeHtml } from './highlight';
 
@@ -102,8 +104,26 @@ function reactionValue(state: SimState, path: string): string {
   return unit.exists ? unit.reaction : 'absent';
 }
 
-export function renderSimulator(state: SimState): string {
-  return SECTIONS.map((section) => {
+/**
+ * Your class is a property of who you are, not a transient situation, so it lives in
+ * app state rather than SimState -- the Reset button must not change it, and the parser
+ * needs it. It renders here because this is where it belongs on screen.
+ */
+export function renderCharacter(flavour: FlavourId, classId: number): string {
+  const options = [
+    `<option value="${ANY_CLASS}"${classId === ANY_CLASS ? ' selected' : ''}>Any class</option>`,
+    ...classesFor(flavour).map(
+      (c) => `<option value="${c.id}"${c.id === classId ? ' selected' : ''}>${escapeHtml(c.name)}</option>`,
+    ),
+  ].join('');
+  return '<fieldset class="sim-section"><legend>You are a</legend><div class="sim-controls">'
+    + '<label class="sim-field"><span>class</span>'
+    + `<select data-path="class" data-type="number">${options}</select></label>`
+    + '</div></fieldset>';
+}
+
+export function renderSimulator(state: SimState, flavour: FlavourId, classId: number): string {
+  return renderCharacter(flavour, classId) + SECTIONS.map((section) => {
     const body = section.controls.map((c) => renderControl(state, c)).join('');
     return `<fieldset class="sim-section"><legend>${escapeHtml(section.title)}</legend>`
       + `<div class="sim-controls">${body}</div></fieldset>`;

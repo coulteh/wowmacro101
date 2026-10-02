@@ -5,10 +5,11 @@ import spellData from '../src/data/spells.retail.json';
 import eraData from '../src/data/spells.era.json';
 import foreverData from '../src/data/spells.forever.json';
 import {
-  createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl, wowheadUrl,
-  ICON_BASE, type SpellData,
+  belongsToClass, createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl,
+  wowheadUrl, ICON_BASE, type SpellData,
 } from '../src/data/spells';
 import { EXAMPLES } from '../src/data/examples';
+import { ANY_CLASS, classesFor } from '../src/data/classes';
 import { parseMacro } from '../src/parser/parser';
 
 const data = spellData as unknown as SpellData;
@@ -182,6 +183,78 @@ describe('every flavour dataset', () => {
       console.log(`    spells.${file}.json: ${(statSync(path).size / 1024).toFixed(0)} kB raw, `
         + `${(gzipped / 1024).toFixed(0)} kB gzipped`);
       expect(gzipped).toBeLessThan(200 * 1024);
+    }
+  });
+});
+
+describe('class ownership', () => {
+  // Real masks verified against each build while planning.
+  it.each(ALL)('%s knows who owns the vanilla class staples', (_f, _raw, idx) => {
+    expect(idx.lookup('Consecration')!.classes).toEqual(['Paladin']);
+    expect(idx.lookup('Mortal Strike')!.classes).toEqual(['Warrior']);
+    expect(idx.lookup('Fireball')!.classes).toEqual(['Mage']);
+    expect(idx.lookup('Rejuvenation')!.classes).toEqual(['Druid']);
+  });
+
+  it('covers the modern classes on Midnight only', () => {
+    expect(index.lookup('Fel Rush')!.classes).toEqual(['Demon Hunter']);
+    expect(index.lookup('Disintegrate')!.classes).toEqual(['Evoker']);
+    expect(index.lookup('Roll')!.classes).toEqual(['Monk']);
+    // Those classes do not exist on the vanilla lines, nor do their abilities.
+    for (const idx of [era, forever]) {
+      expect(idx.has('Fel Rush')).toBe(false);
+      expect(idx.has('Disintegrate')).toBe(false);
+    }
+  });
+
+  it('leaves professions classless rather than listing every class', () => {
+    // Classic Era tags professions with all nine classes; that must normalise to none,
+    // or the tooltip reads "Warrior / Paladin / Hunter / ... ability" for Mining.
+    expect(era.lookup('Mining')!.classes).toEqual([]);
+    expect(era.lookup('Tailoring')!.classes).toEqual([]);
+    expect(index.lookup('Mining')!.classes).toEqual([]);
+  });
+
+  it('never attributes a spell to a class the flavour does not have', () => {
+    // Classic-line ClassMask values carry a Death Knight bit regardless.
+    const vanillaOnly = new Set(classesFor('era').map((c) => c.name));
+    for (const [, raw, idx] of [['era', eraData, era], ['forever', foreverData, forever]] as const) {
+      for (const row of (raw as unknown as SpellData).spells.slice(0, 2000)) {
+        for (const name of idx.lookup(row[0])!.classes) {
+          expect(vanillaOnly.has(name), `${row[0]} attributed to ${name}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('keeps coverage high enough to be useful', () => {
+    const rate = (raw: SpellData, idx: typeof index) =>
+      raw.spells.filter((row) => idx.lookup(row[0])!.classMask !== 0).length / raw.spells.length;
+    // Floors, not targets. Measured: era 34.9%, forever 24.2%, retail 21.5%. The rest of
+    // every dataset is professions, shared skills, items and quest spells, which have no
+    // class. These exist to make a broken join loud rather than silent.
+    expect(rate(eraData as unknown as SpellData, era)).toBeGreaterThan(0.30);
+    expect(rate(foreverData as unknown as SpellData, forever)).toBeGreaterThan(0.20);
+    expect(rate(data, index)).toBeGreaterThan(0.15);
+  });
+
+  it('answers class ownership as a tri-state, never a guess', () => {
+    const consecration = index.lookup('Consecration')!;
+    expect(belongsToClass(consecration, 2)).toBe(true);    // Paladin
+    expect(belongsToClass(consecration, 1)).toBe(false);   // Warrior
+    expect(belongsToClass(consecration, ANY_CLASS)).toBe('unknown');
+    // A spell with no class data must never read as "not yours".
+    expect(belongsToClass(index.lookup('Mining')!, 1)).toBe('unknown');
+  });
+
+  it('offers nine classes on the vanilla lines and thirteen on Midnight', () => {
+    expect(classesFor('retail')).toHaveLength(13);
+    expect(classesFor('era')).toHaveLength(9);
+    expect(classesFor('forever')).toHaveLength(9);
+    for (const flavour of ['era', 'forever'] as const) {
+      const names = classesFor(flavour).map((c) => c.name);
+      expect(names).not.toContain('Death Knight');
+      expect(names).not.toContain('Evoker');
     }
   });
 });

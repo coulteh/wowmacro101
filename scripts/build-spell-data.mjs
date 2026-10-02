@@ -154,22 +154,47 @@ function splitCsvLine(line) {
   return out;
 }
 
-/** Streams a CSV, yielding rows as arrays plus a name->index map for the header. */
+/**
+ * Streams a CSV, yielding rows as arrays plus a name->index map for the header.
+ *
+ * A quoted field may contain newlines -- ChrSpecialization.Description_lang does, and
+ * naive line-by-line parsing turned its 61 records into 140 broken ones, silently
+ * corrupting every spec-to-class lookup. So lines are accumulated until the quotes
+ * balance, which is what makes a record.
+ */
 async function* readCsv(path) {
   const stream = createInterface({
     input: createReadStream(path, { encoding: 'utf8' }),
     crlfDelay: Infinity,
   });
+
+  const quotesBalanced = (text) => {
+    let quotes = 0;
+    for (const ch of text) if (ch === '"') quotes++;
+    // An escaped "" adds two, so parity still tracks whether a field is open.
+    return quotes % 2 === 0;
+  };
+
   let columns = null;
-  for await (const line of stream) {
-    if (!line) continue;
+  let pending = null;
+
+  const emit = (record) => {
     if (!columns) {
-      columns = new Map(splitCsvLine(line).map((name, i) => [name, i]));
-      yield { columns };
-      continue;
+      columns = new Map(splitCsvLine(record).map((name, i) => [name, i]));
+      return { columns };
     }
-    yield { row: splitCsvLine(line) };
+    return { row: splitCsvLine(record) };
+  };
+
+  for await (const line of stream) {
+    pending = pending === null ? line : `${pending}\n${line}`;
+    if (!quotesBalanced(pending)) continue;   // mid-field, keep accumulating
+    const record = pending;
+    pending = null;
+    if (!record) continue;
+    yield emit(record);
   }
+  if (pending) yield emit(pending);
 }
 
 function requireColumn(columns, table, ...candidates) {
@@ -329,6 +354,160 @@ async function collectNamesToIds(path, wanted) {
   return { byName: out, total };
 }
 
+/** Simple two-column map, skipping unusable rows. */
+async function collectPairs(path, table, keyColumn, valueColumn) {
+  const out = new Map();
+  let k = -1;
+  let v = -1;
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      k = requireColumn(item.columns, table, keyColumn);
+      v = requireColumn(item.columns, table, valueColumn);
+      continue;
+    }
+    const key = Number(item.row[k]);
+    const value = Number(item.row[v]);
+    if (Number.isFinite(key) && Number.isFinite(value)) out.set(key, value);
+  }
+  return out;
+}
+
+const classBit = (classId) => (classId > 0 ? 1 << (classId - 1) : 0);
+
+/**
+ * A ClassMask of 0 or -1 means "not class-specific" -- -1 is every class, which is the
+ * same as no restriction -- so neither contributes anything.
+ */
+function usableMask(raw) {
+  const mask = Number(raw);
+  if (!Number.isFinite(mask) || mask === 0 || mask === -1) return 0;
+  return mask & 0x1fff; // thirteen classes
+}
+
+/**
+ * spellId -> class bitmask, unioned over every source that implies class ownership.
+ *
+ * SkillLineAbility alone covers only 6% of retail names and misses the entire modern
+ * class kit, because those come from the talent trees. The trait chain
+ *   TraitDefinition -> TraitNodeEntry -> TraitNodeXTraitNodeEntry -> TraitNode
+ *     -> TraitTreeLoadout -> ChrSpecialization
+ * lifts it to ~23%, which is as high as it should go: the rest are professions, mounts,
+ * quest items and racials, which genuinely have no class.
+ */
+async function collectClassMasks(build, paths) {
+  const masks = new Map();
+  const add = (spellId, mask) => {
+    if (!spellId || !mask) return;
+    masks.set(spellId, (masks.get(spellId) ?? 0) | mask);
+  };
+
+  // spec -> class
+  const specClass = paths.chrSpecialization
+    ? await collectPairs(paths.chrSpecialization, 'ChrSpecialization', 'ID', 'ClassID')
+    : new Map();
+
+  // skill line -> class mask
+  const skillMask = new Map();
+  if (paths.skillRaceClassInfo) {
+    let k = -1;
+    let v = -1;
+    for await (const item of readCsv(paths.skillRaceClassInfo)) {
+      if (item.columns) {
+        k = requireColumn(item.columns, 'SkillRaceClassInfo', 'SkillID');
+        v = requireColumn(item.columns, 'SkillRaceClassInfo', 'ClassMask');
+        continue;
+      }
+      const skill = Number(item.row[k]);
+      if (Number.isFinite(skill)) skillMask.set(skill, (skillMask.get(skill) ?? 0) | usableMask(item.row[v]));
+    }
+  }
+
+  // SkillLineAbility: its own ClassMask, plus whatever its skill line implies.
+  if (paths.skillLineAbility) {
+    let i = {};
+    for await (const item of readCsv(paths.skillLineAbility)) {
+      if (item.columns) {
+        i = {
+          spell: requireColumn(item.columns, 'SkillLineAbility', 'Spell'),
+          mask: requireColumn(item.columns, 'SkillLineAbility', 'ClassMask'),
+          line: requireColumn(item.columns, 'SkillLineAbility', 'SkillLine'),
+        };
+        continue;
+      }
+      const spell = Number(item.row[i.spell]);
+      add(spell, usableMask(item.row[i.mask]));
+      add(spell, skillMask.get(Number(item.row[i.line])) ?? 0);
+    }
+  }
+
+  // SpecializationSpells: spec implies class.
+  if (paths.specializationSpells) {
+    let i = {};
+    for await (const item of readCsv(paths.specializationSpells)) {
+      if (item.columns) {
+        i = {
+          spell: requireColumn(item.columns, 'SpecializationSpells', 'SpellID'),
+          spec: requireColumn(item.columns, 'SpecializationSpells', 'SpecID'),
+        };
+        continue;
+      }
+      add(Number(item.row[i.spell]), classBit(specClass.get(Number(item.row[i.spec])) ?? 0));
+    }
+  }
+
+  // The trait chain, walked backwards from loadouts to definitions.
+  if (paths.traitTreeLoadout && paths.traitNode && paths.traitNodeXEntry && paths.traitNodeEntry) {
+    const treeMask = new Map();
+    let i = {};
+    for await (const item of readCsv(paths.traitTreeLoadout)) {
+      if (item.columns) {
+        i = {
+          tree: requireColumn(item.columns, 'TraitTreeLoadout', 'TraitTreeID'),
+          spec: requireColumn(item.columns, 'TraitTreeLoadout', 'ChrSpecializationID'),
+        };
+        continue;
+      }
+      const tree = Number(item.row[i.tree]);
+      const bit = classBit(specClass.get(Number(item.row[i.spec])) ?? 0);
+      if (tree && bit) treeMask.set(tree, (treeMask.get(tree) ?? 0) | bit);
+    }
+
+    const nodeTree = await collectPairs(paths.traitNode, 'TraitNode', 'ID', 'TraitTreeID');
+    const entryNode = await collectPairs(
+      paths.traitNodeXEntry, 'TraitNodeXTraitNodeEntry', 'TraitNodeEntryID', 'TraitNodeID',
+    );
+    const entryDefinition = await collectPairs(
+      paths.traitNodeEntry, 'TraitNodeEntry', 'ID', 'TraitDefinitionID',
+    );
+
+    const definitionMask = new Map();
+    for (const [entry, definition] of entryDefinition) {
+      const mask = treeMask.get(nodeTree.get(entryNode.get(entry) ?? 0) ?? 0) ?? 0;
+      if (mask) definitionMask.set(definition, (definitionMask.get(definition) ?? 0) | mask);
+    }
+
+    if (paths.traitDefinition) {
+      let d = {};
+      for await (const item of readCsv(paths.traitDefinition)) {
+        if (item.columns) {
+          d = {
+            id: requireColumn(item.columns, 'TraitDefinition', 'ID'),
+            spells: ['SpellID', 'VisibleSpellID']
+              .filter((c) => item.columns.has(c))
+              .map((c) => item.columns.get(c)),
+          };
+          continue;
+        }
+        const mask = definitionMask.get(Number(item.row[d.id])) ?? 0;
+        if (!mask) continue;
+        for (const column of d.spells) add(Number(item.row[column]), mask);
+      }
+    }
+  }
+
+  return masks;
+}
+
 async function collectNames(path, wanted) {
   const names = new Set();
   let total = 0;
@@ -390,6 +569,20 @@ async function main() {
   );
   console.log(`  SpellMisc: ${misc.size} spells, ${iconFileIds.size} distinct icon files, ${iconNames.size} named`);
 
+  // Class ownership. Every table is optional: the trait chain is retail-shaped and the
+  // Classic lines do without most of it.
+  const classMasks = await collectClassMasks(build, {
+    chrSpecialization: await fetchTable('ChrSpecialization', build, { required: false }),
+    skillRaceClassInfo: await fetchTable('SkillRaceClassInfo', build, { required: false }),
+    skillLineAbility: await fetchTable('SkillLineAbility', build, { required: false }),
+    specializationSpells: await fetchTable('SpecializationSpells', build, { required: false }),
+    traitDefinition: await fetchTable('TraitDefinition', build, { required: false }),
+    traitNodeEntry: await fetchTable('TraitNodeEntry', build, { required: false }),
+    traitNodeXEntry: await fetchTable('TraitNodeXTraitNodeEntry', build, { required: false }),
+    traitNode: await fetchTable('TraitNode', build, { required: false }),
+    traitTreeLoadout: await fetchTable('TraitTreeLoadout', build, { required: false }),
+  });
+
   const castTimes = await collectLookup(await fetchTable('SpellCastTimes', build), 'SpellCastTimes', 'Base');
   const ranges = await collectLookup(await fetchTable('SpellRange', build), 'SpellRange', 'RangeMax_0');
   const cooldowns = await collectCooldowns(await fetchTable('SpellCooldowns', build), wanted);
@@ -409,12 +602,19 @@ async function main() {
   const spells = [];
   let ambiguousNames = 0;
   let withIcon = 0;
+  let withClass = 0;
   for (const [name, ids] of byName) {
     const candidates = [...ids].sort((a, b) => a - b);
     // Prefer a spell the player actually learns over a talent-tree reference.
     const id = candidates.find((candidate) => learned.has(candidate)) ?? candidates[0];
     const ambiguous = candidates.length > 1;
     if (ambiguous) ambiguousNames++;
+
+    // Union across every candidate: if any same-named spell could belong to the
+    // selected class, we must not warn. Under-warning beats a false accusation.
+    let classMask = 0;
+    for (const candidate of candidates) classMask |= classMasks.get(candidate) ?? 0;
+    if (classMask) withClass++;
 
     const entry = misc.get(id);
     const icon = entry ? iconNames.get(entry.iconFileDataId) ?? null : null;
@@ -430,6 +630,7 @@ async function main() {
       cooldown ? cooldown.cooldownMs : 0,
       cooldown ? cooldown.gcdMs : 0,
       ambiguous ? 1 : 0,
+      classMask,
     ]);
   }
   spells.sort((a, b) => a[0].localeCompare(b[0], 'en'));
@@ -444,7 +645,8 @@ async function main() {
     note:
       'Spells referenced by SkillLineAbility, SpecializationSpells or TraitDefinition. '
       + 'Deliberately over-inclusive: used only for soft hints, never hard validation. '
-      + 'Columns: name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, ambiguous.',
+      + 'Columns: name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, '
+      + 'ambiguous, classMask (bit 0 = Warrior ... bit 12 = Evoker; 0 = no class).',
     count: spells.length,
     icons,
     spells,
@@ -455,6 +657,7 @@ async function main() {
   console.log(`  ${total} spells scanned, ${wanted.size} player-facing ids`);
   console.log(`  ${spells.length} names, ${withIcon} with an icon, ${icons.length} distinct icons`);
   console.log(`  ${ambiguousNames} names map to more than one spell id (${(100 * ambiguousNames / spells.length).toFixed(1)}%)`);
+  console.log(`  ${withClass} names have class ownership (${(100 * withClass / spells.length).toFixed(1)}%)`);
   console.log(`  wrote ${out} (${kb} kB)`);
 }
 
