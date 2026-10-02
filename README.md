@@ -1,5 +1,7 @@
 # WoW Macro 101
 
+**Live: <https://coulteh.github.io/wowmacro101/>**
+
 A regex101-style explainer for World of Warcraft macros. Type a macro and it tells you,
 token by token, what the game will actually do with it — then lets you set up a situation
 and shows which clause really fires.
@@ -41,6 +43,35 @@ npm run build      # static output in dist/
 ```
 
 No runtime dependencies. The build is a static site that can be hosted anywhere.
+
+## Deployment
+
+`.github/workflows/deploy.yml` builds and tests on every push and pull request, and
+deploys to GitHub Pages only from `main`. Pull requests are checked but never published.
+
+`npm run build` is `tsc --noEmit && vite build`, so a type error fails the deploy — there
+is no separate typecheck step to drift out of sync with it.
+
+Pages serves from a subpath (`/wowmacro101/`), which works because `vite.config.ts` sets
+`base: './'` and nothing in the app uses a root-relative URL. Permalinks are hash-based,
+so the prefix does not affect them. To check this locally without deploying, serve the
+repo root and open the build at its own subpath:
+
+```sh
+npm run build
+python3 -m http.server 5199        # then open http://127.0.0.1:5199/dist/
+```
+
+**Spell data is not regenerated in CI.** The datasets are committed, and making a deploy
+depend on wago.tools being reachable and unchanged would make builds non-reproducible and
+occasionally red for reasons unrelated to the code. `npm run data:spells` stays manual.
+
+One-off setup, if the repo is ever recreated — Pages has to be told to take its content
+from the workflow rather than a branch:
+
+```sh
+gh api -X POST repos/coulteh/wowmacro101/pages -f build_type=workflow
+```
 
 ## Game versions
 
