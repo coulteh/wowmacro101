@@ -10,22 +10,26 @@ import type { FlavourId } from '../flavours';
 export interface WowClass {
   id: number;
   name: string;
+  /** The game's own class colour, from ChrClasses.ClassColorR/G/B. Not guessed. */
+  color: string;
+  /** Icon file name for the render CDN, from ChrClasses.IconFileDataID. */
+  icon: string;
 }
 
 export const WOW_CLASSES: WowClass[] = [
-  { id: 1, name: 'Warrior' },
-  { id: 2, name: 'Paladin' },
-  { id: 3, name: 'Hunter' },
-  { id: 4, name: 'Rogue' },
-  { id: 5, name: 'Priest' },
-  { id: 6, name: 'Death Knight' },
-  { id: 7, name: 'Shaman' },
-  { id: 8, name: 'Mage' },
-  { id: 9, name: 'Warlock' },
-  { id: 10, name: 'Monk' },
-  { id: 11, name: 'Druid' },
-  { id: 12, name: 'Demon Hunter' },
-  { id: 13, name: 'Evoker' },
+  { id: 1, name: 'Warrior', color: '#C69B6D', icon: 'classicon_warrior' },
+  { id: 2, name: 'Paladin', color: '#F48CBA', icon: 'classicon_paladin' },
+  { id: 3, name: 'Hunter', color: '#AAD372', icon: 'classicon_hunter' },
+  { id: 4, name: 'Rogue', color: '#FFF468', icon: 'classicon_rogue' },
+  { id: 5, name: 'Priest', color: '#FFFFFF', icon: 'classicon_priest' },
+  { id: 6, name: 'Death Knight', color: '#C41E3A', icon: 'spell_deathknight_classicon' },
+  { id: 7, name: 'Shaman', color: '#0070DD', icon: 'classicon_shaman' },
+  { id: 8, name: 'Mage', color: '#3FC7EB', icon: 'classicon_mage' },
+  { id: 9, name: 'Warlock', color: '#8788EE', icon: 'classicon_warlock' },
+  { id: 10, name: 'Monk', color: '#00FF98', icon: 'classicon_monk' },
+  { id: 11, name: 'Druid', color: '#FF7C0A', icon: 'classicon_druid' },
+  { id: 12, name: 'Demon Hunter', color: '#A330C9', icon: 'classicon_demonhunter' },
+  { id: 13, name: 'Evoker', color: '#33937F', icon: 'classicon_evoker' },
 ];
 
 /** No class selected: nothing is class-checked, which is the default. */
@@ -48,6 +52,10 @@ const BY_ID = new Map(WOW_CLASSES.map((c) => [c.id, c]));
 
 export function className(id: number): string | null {
   return BY_ID.get(id)?.name ?? null;
+}
+
+export function wowClass(id: number): WowClass | null {
+  return BY_ID.get(id) ?? null;
 }
 
 export function classesFor(flavour: FlavourId): WowClass[] {

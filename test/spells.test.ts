@@ -9,7 +9,7 @@ import {
   wowheadUrl, ICON_BASE, type SpellData,
 } from '../src/data/spells';
 import { EXAMPLES } from '../src/data/examples';
-import { ANY_CLASS, classesFor } from '../src/data/classes';
+import { ANY_CLASS, classesFor, WOW_CLASSES } from '../src/data/classes';
 import { parseMacro } from '../src/parser/parser';
 
 const data = spellData as unknown as SpellData;
@@ -256,5 +256,50 @@ describe('class ownership', () => {
       expect(names).not.toContain('Death Knight');
       expect(names).not.toContain('Evoker');
     }
+  });
+});
+
+describe('class presentation data', () => {
+  it('uses the game\'s own class colours, not approximations', () => {
+    // Straight from ChrClasses.ClassColorR/G/B on build 12.1.0.69933.
+    const byName = new Map(WOW_CLASSES.map((c) => [c.name, c]));
+    expect(byName.get('Warrior')!.color).toBe('#C69B6D');
+    expect(byName.get('Druid')!.color).toBe('#FF7C0A');
+    expect(byName.get('Priest')!.color).toBe('#FFFFFF');
+    expect(byName.get('Evoker')!.color).toBe('#33937F');
+  });
+
+  it('gives every class a colour and an icon', () => {
+    expect(WOW_CLASSES).toHaveLength(13);
+    for (const c of WOW_CLASSES) {
+      expect(c.color, `${c.name} colour`).toMatch(/^#[0-9A-F]{6}$/);
+      expect(c.icon, `${c.name} icon`).toMatch(/^[a-z0-9_]+$/);
+    }
+    // Icon names must be unique, or two classes would show the same badge.
+    expect(new Set(WOW_CLASSES.map((c) => c.icon)).size).toBe(13);
+  });
+
+  it('tags every bundled example with the class it is written for', () => {
+    for (const example of EXAMPLES) {
+      expect(example.classId, `${example.title} has no class`).toBeDefined();
+      expect(classesFor('retail').some((c) => c.id === example.classId)).toBe(true);
+    }
+  });
+
+  it('keeps each example clean for its own class', () => {
+    // This is the whole point of tagging them: no warnings about our own examples.
+    for (const example of EXAMPLES) {
+      const ast = parseMacro(example.macro, 'retail', { spells: index, classId: example.classId });
+      const complaints = ast.issues.filter((i) => /ability\. Your class is set to/.test(i.message));
+      expect(complaints.map((c) => c.message), example.title).toEqual([]);
+    }
+  });
+
+  it('would warn if an example were loaded as the wrong class', () => {
+    // Guards that the previous test passes because of the tag, not because the check
+    // is inert.
+    const rogueExample = EXAMPLES.find((e) => e.title === 'Modifier multi-spell')!;
+    const asWarrior = parseMacro(rogueExample.macro, 'retail', { spells: index, classId: 1 });
+    expect(asWarrior.issues.some((i) => /is a Rogue ability/.test(i.message))).toBe(true);
   });
 });

@@ -14,7 +14,7 @@ import { hideSpellTooltip, initSpellTooltip } from './ui/tooltip';
 import { escapeHtml, highlightHtml, nodeAtOffset } from './ui/highlight';
 import { readPermalink, writePermalink } from './ui/permalink';
 import { REF_TABS, renderReference, type RefTab } from './ui/reference';
-import { applyControlChange, renderSimulator } from './ui/simulator';
+import { applyControlChange, renderCharacter, renderSimulator } from './ui/simulator';
 
 const STORAGE_KEY = 'wowmacro101:v1';
 
@@ -134,6 +134,19 @@ function renderRef(): void {
 
 function renderSimPanel(): void {
   simEl.innerHTML = renderSimulator(state.sim, state.flavour, state.classId);
+}
+
+/**
+ * Re-renders just the class picker, so its colour and icon follow the selection.
+ * update() deliberately does not touch the Situation panel -- re-rendering it on every
+ * keystroke would fight the controls -- so this has to be explicit.
+ */
+function renderCharacterPanel(): void {
+  const current = document.getElementById('character');
+  if (!current) return;
+  const hadFocus = current.contains(document.activeElement);
+  current.outerHTML = renderCharacter(state.flavour, state.classId);
+  if (hadFocus) document.querySelector<HTMLSelectElement>('[data-path="class"]')?.focus();
 }
 
 function renderFlavourNote(): void {
@@ -280,7 +293,12 @@ function bind(): void {
   examplesSelect.addEventListener('change', () => {
     const index = Number(examplesSelect.value);
     if (Number.isNaN(index) || index < 0) return;
-    setMacro(EXAMPLES[index].macro);
+    const example = EXAMPLES[index];
+    // Match the example's class, so the app does not warn about its own examples.
+    const wanted = example.classId ?? ANY_CLASS;
+    state.classId = isClassAvailable(state.flavour, wanted) ? wanted : ANY_CLASS;
+    renderSimPanel();
+    setMacro(example.macro);
     examplesSelect.value = '-1';
     input.focus();
   });
@@ -355,6 +373,7 @@ function onSimChange(event: Event): void {
   // Class is app state, not simulated state -- see renderCharacter.
   if (path === 'class') {
     state.classId = Number(target.value) || ANY_CLASS;
+    renderCharacterPanel();
     update();
     return;
   }

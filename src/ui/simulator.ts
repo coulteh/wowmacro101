@@ -1,6 +1,7 @@
 // The "situation" panel: the macro equivalent of regex101's test string.
 
-import { ANY_CLASS, classesFor } from '../data/classes';
+import { ANY_CLASS, classesFor, wowClass } from '../data/classes';
+import { iconUrl } from '../data/spells';
 import type { FlavourId } from '../flavours';
 import type { SimState } from '../sim/state';
 import { escapeHtml } from './highlight';
@@ -113,11 +114,25 @@ export function renderCharacter(flavour: FlavourId, classId: number): string {
   const options = [
     `<option value="${ANY_CLASS}"${classId === ANY_CLASS ? ' selected' : ''}>Any class</option>`,
     ...classesFor(flavour).map(
-      (c) => `<option value="${c.id}"${c.id === classId ? ' selected' : ''}>${escapeHtml(c.name)}</option>`,
+      (c) => `<option value="${c.id}"${c.id === classId ? ' selected' : ''}`
+        // Chrome honours option colours on some platforms and ignores them on others,
+        // so this is a bonus -- the select and the icon carry the colour regardless.
+        + ` style="color:${c.color}">${escapeHtml(c.name)}</option>`,
     ),
   ].join('');
-  return '<fieldset class="sim-section"><legend>You are a</legend><div class="sim-controls">'
-    + '<label class="sim-field"><span>class</span>'
+
+  const selected = wowClass(classId);
+  // The class colour rides on a custom property so the stylesheet can darken it for
+  // light mode, where Priest white and Rogue yellow are otherwise unreadable.
+  const style = selected ? ` style="--class-color:${selected.color}"` : '';
+  const icon = selected
+    ? `<img class="class-icon" src="${iconUrl(selected.icon, 36)}" alt="" width="18" height="18"
+         onerror="this.style.visibility='hidden'">`
+    : '';
+
+  return '<fieldset class="sim-section" id="character"><legend>You are a</legend>'
+    + `<div class="sim-controls class-picker${selected ? ' has-class' : ''}"${style}>`
+    + `<label class="sim-field"><span>class</span>${icon}`
     + `<select data-path="class" data-type="number">${options}</select></label>`
     + '</div></fieldset>';
 }

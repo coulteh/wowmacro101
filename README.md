@@ -189,6 +189,19 @@ by two classes never warns for either. That direction is deliberate: under-warni
 falsely telling someone their own spell is not theirs. The warning only ever fires when
 the class is positively known and does not match.
 
+Class colours and icons come from `ChrClasses` — `ClassColorR/G/B` and
+`IconFileDataID` — rather than being transcribed from memory, so Warrior really is
+`#C69B6D` and Druid `#FF7C0A`. Icons resolve through the same
+`ManifestInterfaceData` → render-CDN chain as spell icons.
+
+In light mode those colours are mixed 45% with black. That number is load-bearing: it is
+the lightest mix where all thirteen clear 4.5:1 contrast against the card background,
+with Priest (pure white) the binding case at 4.74:1.
+
+Each bundled example is tagged with the class it is written for, and loading one selects
+that class — otherwise the app warns about its own examples using another class's
+abilities.
+
 ### Known limitation: rank metadata
 
 Each dataset holds one record per *name*, so where a name covers several ranks — 25.6% of

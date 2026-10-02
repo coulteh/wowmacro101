@@ -538,3 +538,35 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
   font-size: 12px;
   color: var(--tok-cond);
 }
+
+/* --- Class picker --------------------------------------------------------- */
+
+.class-icon {
+  flex: 0 0 auto;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+/*
+ * The game's own class colours (ChrClasses.ClassColorR/G/B). Several are near-white or
+ * pale — Priest is #FFFFFF, Rogue #FFF468 — so light mode darkens them rather than
+ * rendering them illegible.
+ */
+.class-picker.has-class select {
+  color: var(--class-color);
+  border-color: color-mix(in srgb, var(--class-color) 45%, var(--border));
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: light) {
+  /*
+   * 45% is not arbitrary: it is the lightest mix where all thirteen classes clear
+   * 4.5:1 against the card background. Priest (pure white) is the binding case at
+   * 4.74:1; 62% left it at 2.68:1, which is unreadable.
+   */
+  .class-picker.has-class select {
+    color: color-mix(in srgb, var(--class-color) 45%, #000);
+    border-color: color-mix(in srgb, var(--class-color) 55%, var(--border));
+  }
+  .class-picker option { color: inherit; }
+}
