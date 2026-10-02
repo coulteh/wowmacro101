@@ -137,12 +137,6 @@ function renderSimPanel(): void {
 }
 
 /**
- * Re-renders the Situation panel after a class change. The class drives more than its
- * own swatch: it names the specialisations and decides whether the pet section is shown
- * at all. update() deliberately leaves the panel alone -- re-rendering on every
- * keystroke would fight the controls -- so this is explicit.
- */
-/**
  * Druid has four specialisations, everyone else three. Leaving spec on 4 after
  * switching away from Druid would show "1 — Arms" while the simulator still evaluated
  * [spec:4].
@@ -152,10 +146,20 @@ function clampSpec(): void {
   if (count && state.sim.spec > count) state.sim.spec = count;
 }
 
-function renderCharacterPanel(): void {
-  const hadFocus = document.activeElement?.getAttribute('data-path') === 'class';
+/**
+ * Re-renders the Situation panel, keeping focus on whichever control triggered it.
+ *
+ * Needed whenever one control changes another's shape: class names the specialisations
+ * and gates the pet section, spec gates the forms, and a unit going absent disables its
+ * dead and party checkboxes. update() deliberately leaves the panel alone -- rebuilding
+ * it on every keystroke would fight the controls -- so this is explicit.
+ */
+function rerenderSituation(): void {
+  const focused = document.activeElement?.getAttribute('data-path');
   renderSimPanel();
-  if (hadFocus) document.querySelector<HTMLSelectElement>('[data-path="class"]')?.focus();
+  if (focused) {
+    document.querySelector<HTMLElement>(`[data-path="${CSS.escape(focused)}"]`)?.focus();
+  }
 }
 
 function renderFlavourNote(): void {
@@ -388,7 +392,7 @@ function onSimChange(event: Event): void {
     state.classId = Number(target.value) || ANY_CLASS;
     clampSpec();
     clampForm();
-    renderCharacterPanel();
+    rerenderSituation();
     update();
     return;
   }
@@ -396,11 +400,13 @@ function onSimChange(event: Event): void {
     ? target.checked
     : target.value;
   applyControlChange(state.sim, path, target.dataset.type ?? 'string', raw);
-  // Spec gates which forms exist (Moonkin is Balance-only), so the form control has to
-  // be rebuilt when it changes.
   if (path === 'spec') {
+    // Spec gates which forms exist (Moonkin is Balance-only).
     clampForm();
-    renderCharacterPanel();
+    rerenderSituation();
+  } else if (path.endsWith('.reaction')) {
+    // A unit going absent disables its dead and party checkboxes.
+    rerenderSituation();
   }
   renderOutputs();
 }

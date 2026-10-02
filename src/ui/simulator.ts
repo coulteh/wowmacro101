@@ -8,11 +8,23 @@ import type { FlavourId } from '../flavours';
 import type { SimState } from '../sim/state';
 import { escapeHtml } from './highlight';
 
+interface Common {
+  label: string;
+  path: string;
+  /**
+   * Render the label only as an accessible name, not visible text. For controls whose
+   * section legend already says what they are.
+   */
+  hideLabel?: boolean;
+  /** Greyed out when this returns true, for states that cannot apply. */
+  disabledWhen?: (state: SimState) => boolean;
+}
+
 type Control =
-  | { kind: 'check'; label: string; path: string }
-  | { kind: 'select'; label: string; path: string; type: 'string' | 'number'; options: [string, string][] }
-  | { kind: 'number'; label: string; path: string; min: number; max: number }
-  | { kind: 'text'; label: string; path: string; placeholder?: string };
+  | (Common & { kind: 'check' })
+  | (Common & { kind: 'select'; type: 'string' | 'number'; options: [string, string][] })
+  | (Common & { kind: 'number'; min: number; max: number })
+  | (Common & { kind: 'text'; placeholder?: string });
 
 interface Section {
   title: string;
@@ -22,12 +34,15 @@ interface Section {
   showFor?: (flavour: FlavourId, classId: number) => boolean;
 }
 
-const REACTIONS: [string, string][] = [
-  ['absent', 'no unit'],
-  ['friendly', 'friendly'],
-  ['hostile', 'hostile'],
-  ['neutral', 'neutral'],
-];
+/** The empty option names the thing it belongs to: "no target" beats "no unit". */
+function reactions(absentLabel: string): [string, string][] {
+  return [
+    ['absent', absentLabel],
+    ['friendly', 'friendly'],
+    ['hostile', 'hostile'],
+    ['neutral', 'neutral'],
+  ];
+}
 
 /**
  * `[spec:N]` indexes the class's specialisations in order, so with a class chosen we
@@ -72,13 +87,26 @@ function renderFormControl(
     + `<select data-path="form" data-type="number">${options}</select></label>`;
 }
 
-function unitSection(slot: 'target' | 'focus' | 'mouseover', title: string): Section {
+function unitSection(
+  slot: 'target' | 'focus' | 'mouseover', title: string, absentLabel: string,
+): Section {
+  // Nothing there means dead and party membership cannot apply, so they grey out
+  // rather than offering a contradiction like "no target, dead".
+  const absent = (state: SimState) => !state.units[slot].exists;
   return {
     title,
     controls: [
-      { kind: 'select', label: 'is', path: `units.${slot}.reaction`, type: 'string', options: REACTIONS },
-      { kind: 'check', label: 'dead', path: `units.${slot}.dead` },
-      { kind: 'check', label: 'in your party', path: `units.${slot}.inParty` },
+      {
+        kind: 'select',
+        // The legend already says which unit this is, so "is" only repeated it.
+        label: title,
+        hideLabel: true,
+        path: `units.${slot}.reaction`,
+        type: 'string',
+        options: reactions(absentLabel),
+      },
+      { kind: 'check', label: 'dead', path: `units.${slot}.dead`, disabledWhen: absent },
+      { kind: 'check', label: 'in your party', path: `units.${slot}.inParty`, disabledWhen: absent },
     ],
   };
 }
@@ -116,9 +144,9 @@ export const SECTIONS: Section[] = [
       },
     ],
   },
-  unitSection('target', 'Your target'),
-  unitSection('focus', 'Your focus'),
-  unitSection('mouseover', 'Under your cursor'),
+  unitSection('target', 'Your target', 'no target'),
+  unitSection('focus', 'Your focus', 'no focus'),
+  unitSection('mouseover', 'Under your cursor', 'nothing'),
   {
     title: 'Your pet',
     // Hidden for classes with no commandable pet -- [pet] and /petattack are
@@ -215,11 +243,13 @@ function specAvailable(flavour: FlavourId): boolean {
 
 function renderControl(state: SimState, control: Control): string {
   const path = control.path;
+  const off = control.disabledWhen?.(state) ? ' disabled' : '';
   switch (control.kind) {
     case 'check': {
       const on = Boolean(getPath(state, path));
-      return `<label class="sim-check"><input type="checkbox" data-path="${path}" data-type="bool"`
-        + `${on ? ' checked' : ''}> ${escapeHtml(control.label)}</label>`;
+      return `<label class="sim-check${off ? ' is-disabled' : ''}">`
+        + `<input type="checkbox" data-path="${path}" data-type="bool"`
+        + `${on ? ' checked' : ''}${off}> ${escapeHtml(control.label)}</label>`;
     }
     case 'select': {
       const current = path.endsWith('.reaction')
@@ -228,8 +258,12 @@ function renderControl(state: SimState, control: Control): string {
       const options = control.options
         .map(([v, l]) => `<option value="${v}"${v === current ? ' selected' : ''}>${escapeHtml(l)}</option>`)
         .join('');
-      return `<label class="sim-field"><span>${escapeHtml(control.label)}</span>`
-        + `<select data-path="${path}" data-type="${control.type}">${options}</select></label>`;
+      const select = `<select data-path="${path}" data-type="${control.type}"`
+        + `${control.hideLabel ? ` aria-label="${escapeHtml(control.label)}"` : ''}`
+        + `${off}>${options}</select>`;
+      return control.hideLabel
+        ? `<div class="sim-field">${select}</div>`
+        : `<label class="sim-field"><span>${escapeHtml(control.label)}</span>${select}</label>`;
     }
     case 'number': {
       return `<label class="sim-field"><span>${escapeHtml(control.label)}</span>`

@@ -571,3 +571,6 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
   }
   .class-picker option { color: inherit; }
 }
+
+/* A control whose state cannot apply — "no target, dead" is not a thing. */
+.sim-check.is-disabled { color: var(--text-faint); cursor: not-allowed; }
