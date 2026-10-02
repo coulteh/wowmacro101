@@ -5,8 +5,10 @@
 // *retail* engine, so it shares Retail's macro parser. Supporting it is a matter of
 // tagging which conditionals are meaningful.
 //
-// Classic Era is the genuine fork: spell ranks are live there and Retail has no concept
-// of them, which is what `features` exists for.
+// The Classic lines -- Classic Era and Forever -- are the genuine fork: spell ranks are
+// live there and Midnight has no concept of them, which is what `features` exists for.
+// Forever follows Classic Era rather than Midnight on talents too, so it has no
+// specialisations.
 
 export type FlavourId = 'retail' | 'forever' | 'era';
 
@@ -45,10 +47,9 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
     interfaceVersion: 16001,
     provisional: true,
     note:
-      'Forever launches 4 Nov 2026 and runs the modern macro engine over vanilla content, '
-      + 'so the syntax matches Midnight. Spell data here comes from a pre-launch build and '
+      'Forever launches 4 Nov 2026. Spell data here comes from a pre-launch build and '
       + 'will change — treat flavour-specific notes as provisional.',
-    features: { spellRanks: false },
+    features: { spellRanks: true },
   },
   era: {
     id: 'era',
@@ -56,10 +57,11 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
     shortLabel: 'Classic Era',
     interfaceVersion: 11509,
     provisional: false,
+    // No note about spell ranks: anyone playing a Classic line already knows ranks
+    // exist, so saying so is clutter at the top of every page.
     note:
-      'Classic Era supports spell ranks, so Fireball(Rank 3) is meaningful here. A few '
-      + 'conditionals could not be confirmed against a reliable source and are marked '
-      + 'unverified rather than guessed at.',
+      'A few conditionals could not be confirmed against a reliable source and are '
+      + 'marked unverified rather than guessed at.',
     features: { spellRanks: true },
   },
 };

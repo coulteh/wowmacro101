@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMacro } from '../src/parser/parser';
+import { FLAVOURS } from '../src/flavours';
 import type { MacroAst } from '../src/parser/types';
 
 const errors = (ast: MacroAst) => ast.issues.filter((i) => i.severity === 'error');
@@ -268,7 +269,9 @@ describe('flavours', () => {
   });
 
   it('marks unverified Forever conditionals as info, never an error', () => {
-    const ast = parseMacro('/cast [talent:1/1] Something', 'forever');
+    // Vehicles are a Wrath-era system but Forever is new content, so this is genuinely
+    // unconfirmed rather than known-absent.
+    const ast = parseMacro('/cast [vehicleui] Something', 'forever');
     expect(errors(ast)).toHaveLength(0);
     expect(infos(ast).some((i) => /Unverified on Forever/.test(i.message))).toBe(true);
   });
@@ -389,10 +392,19 @@ describe('Classic Era conditionals', () => {
     }
   });
 
-  it('treats row/column talents as native on Classic Era', () => {
-    // Legacy on Midnight, unverified on Forever, but the real thing here.
+  it('treats row/column talents as native on both Classic lines', () => {
+    // Legacy on Midnight, but the real thing on Classic Era and Forever alike.
     expect(parseMacro('/cast [talent:1/1] Something', 'era').issues).toHaveLength(0);
-    expect(parseMacro('/cast [talent:1/1] Something', 'forever').issues.length).toBeGreaterThan(0);
+    expect(parseMacro('/cast [talent:1/1] Something', 'forever').issues).toHaveLength(0);
+  });
+
+  it('rejects specialisations on both Classic lines', () => {
+    // Forever follows Classic Era on talents, so it has no specs either.
+    for (const flavour of ['era', 'forever'] as const) {
+      const ast = parseMacro('/cast [spec:1] Fireball', flavour);
+      expect(warnings(ast)[0].message, flavour).toMatch(/can never be true on/);
+    }
+    expect(parseMacro('/cast [spec:1] Fireball', 'retail').issues).toHaveLength(0);
   });
 
   it('admits what it cannot confirm rather than guessing', () => {
@@ -478,5 +490,38 @@ describe('class mismatch warnings', () => {
     };
     expect(parseMacro('/cast Disintegrate', 'retail', { spells: evoker, classId: WARRIOR }).issues[0].message)
       .toMatch(/is an Evoker ability/);
+  });
+});
+
+
+describe('spell ranks on both Classic lines', () => {
+  it('splits the rank off on Forever as well as Classic Era', () => {
+    for (const flavour of ['era', 'forever'] as const) {
+      const clause = parseMacro('/cast Fireball(Rank 3)', flavour).lines[0].clauses[0];
+      expect(clause.arg?.text, flavour).toBe('Fireball');
+      expect(clause.arg?.rank, flavour).toBe(3);
+    }
+  });
+
+  it('says nothing about rank syntax on a Classic line', () => {
+    // The "ranks were removed" note belongs to Midnight only.
+    expect(parseMacro('/cast Fireball(Rank 3)', 'forever').issues).toHaveLength(0);
+    expect(parseMacro('/cast Fireball(Rank 3)', 'era').issues).toHaveLength(0);
+    expect(parseMacro('/cast Fireball(Rank 3)', 'retail').issues).toHaveLength(1);
+  });
+});
+
+describe('flavour notes', () => {
+  it('does not tell Classic players that spell ranks exist', () => {
+    // They know. It was clutter at the top of every page.
+    for (const flavour of ['era', 'forever'] as const) {
+      expect(FLAVOURS[flavour].note ?? '', flavour).not.toMatch(/rank/i);
+    }
+  });
+
+  it('keeps the caveats that are actually worth stating', () => {
+    expect(FLAVOURS.era.note).toMatch(/unverified/);
+    expect(FLAVOURS.forever.note).toMatch(/pre-launch/);
+    expect(FLAVOURS.retail.note).toBeUndefined();
   });
 });

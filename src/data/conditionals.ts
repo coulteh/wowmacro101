@@ -224,9 +224,9 @@ export const CONDITIONALS: ConditionalDef[] = [
         : `your active specialisation is ${no(n)}number ${or(v)}`;
     },
     test: (ctx) => ctx.values.some((v) => Number(v) === ctx.state.spec),
-    availability: { era: 'no' },
+    availability: { era: 'no', forever: 'no' },
     flavourNotes: {
-      forever: 'Forever does have specialisations — the beta exposes new spec IDs via the retail trait system.',
+      forever: 'Forever follows Classic Era: talents are a row/column tree, with no specialisations.',
       era: 'Vanilla has no specialisations; talents are a row/column tree.',
     },
   },
@@ -236,9 +236,8 @@ export const CONDITIONALS: ConditionalDef[] = [
     desc: (v, n) => `talent ${or(v)} is ${no(n)}selected`,
     note: 'Row/column syntax from the old talent trees. On modern talent trees prefer [known:Spell Name].',
     test: () => 'unknown',
-    availability: { forever: 'unknown' },
     flavourNotes: {
-      forever: "Forever runs its legacy talent panel on retail's C_Traits system; whether [talent:row/col] is wired up is unverified.",
+      forever: 'Forever uses row/column talents like Classic Era — this is their intended home.',
       era: 'This is the intended home for row/column talents — not legacy here.',
     },
   },

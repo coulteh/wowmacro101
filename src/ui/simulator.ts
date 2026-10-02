@@ -236,9 +236,9 @@ export function renderSimulator(state: SimState, flavour: FlavourId, classId: nu
   return renderCharacter(flavour, classId) + sections;
 }
 
-/** Classic Era has no specialisations, so asking for one is nonsense there. */
+/** Only Midnight has specialisations; both Classic lines use row/column talents. */
 function specAvailable(flavour: FlavourId): boolean {
-  return flavour !== 'era';
+  return flavour === 'retail';
 }
 
 function renderControl(state: SimState, control: Control): string {

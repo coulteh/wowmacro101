@@ -44,27 +44,30 @@ No runtime dependencies. The build is a static site that can be hosted anywhere.
 
 ## Game versions
 
-| Version | Flavour id | Interface | Spell ranks | Data build |
-| --- | --- | --- | --- | --- |
-| Midnight (Retail) | `retail` | 120100 | no | `12.1.0` |
-| Forever | `forever` | 16001 | no | `1.60.1` (pre-launch) |
-| Classic Era | `era` | 11509 | **yes** | `1.15.9` |
+| Version | Flavour id | Interface | Spell ranks | Specialisations | Data build |
+| --- | --- | --- | --- | --- | --- |
+| Midnight (Retail) | `retail` | 120100 | no | yes | `12.1.0` |
+| Forever | `forever` | 16001 | **yes** | no | `1.60.1` (pre-launch) |
+| Classic Era | `era` | 11509 | **yes** | no | `1.15.9` |
 
 The id `retail` is deliberately not renamed to `midnight`: permalinks, `localStorage` and
 the `spells.retail.json` filename all depend on it. Only the label changes.
 
 WoW: Forever launches 4 November 2026. It reports `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE`
-and runs the modern macro engine over vanilla content, so **it shares Midnight's macro
-parser** — supporting it is a matter of tagging which conditionals are *meaningful*, not
-forking the grammar. Its spell data comes from a pre-launch build and should be
-regenerated after launch.
+and runs the modern engine, so the conditional *grammar* is Midnight's — but on the
+things that matter to macros it follows Classic Era: **spell ranks work, and there are no
+specialisations**, because talents are a row/column tree. Its spell data comes from a
+pre-launch build and should be regenerated after launch.
 
-Classic Era is the one version that genuinely differs: **spell ranks**.
+So the split is **Midnight on one side, both Classic lines on the other**.
 `/cast Fireball(Rank 3)` is a core Classic technique and modern WoW has no concept of it,
 so the parser splits the rank off only where `features.spellRanks` is set in
-`src/flavours.ts`. On Midnight and Forever the parentheses stay part of the name — which
-is what the game does — and you get an info explaining why it will not match a spell.
-That is a real mistake people make porting Classic macros forward.
+`src/flavours.ts`. On Midnight the parentheses stay part of the name — which is what the
+game does — and you get an info explaining why it will not match a spell. That is a real
+mistake people make porting Classic macros forward.
+
+The app does **not** announce that ranks exist when you pick a Classic line. Anyone
+playing one already knows, and a banner saying so is clutter at the top of every page.
 
 Conditionals carry an availability tag per flavour: `yes`, `no` ("parses, but can never
 be true here"), or `unknown` ("unverified"). A flavour tag never produces a hard error,
@@ -73,10 +76,11 @@ only a warning or an info. Worked examples of each:
 - `[flyable]` is **no** on both Forever and Classic Era. Blizzard has said flying will
   [never be in Forever](https://www.warcrafttavern.com/forever/news/flying-mounts-wont-exist-in-wow-forever/)
   — deliberate design, not a launch omission — and vanilla Azeroth has none either.
-- `[spec:1]` is **no** on Classic Era: vanilla has no specialisations.
-- `[talent:1/1]` is the one place Classic Era is *better* supported than Midnight, where
-  row/column talents are legacy. It stays `unknown` on Forever, which runs a legacy
-  talent panel on the retail trait system.
+- `[spec:1]` is **no** on both Classic lines: talents are a row/column tree there, so
+  there are no specialisations to index. The Situation panel drops the spec control
+  entirely on those versions rather than offering a meaningless number.
+- `[talent:1/1]` is the one place the Classic lines are *better* supported than Midnight,
+  where row/column talents are legacy. It is native on both Classic Era and Forever.
 - `[group]`, `[known]` and `[channeling]` are **unknown** on Classic Era. Its client
   backported much of the modern macro system so they may well work, but no reliable
   source confirmed it. Tagged honestly rather than guessed — being wrong in the yes/no
