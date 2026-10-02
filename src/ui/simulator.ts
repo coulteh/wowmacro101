@@ -173,8 +173,10 @@ export function renderCharacter(flavour: FlavourId, classId: number): string {
   // The class colour rides on a custom property so the stylesheet can darken it for
   // light mode, where Priest white and Rogue yellow are otherwise unreadable.
   const style = selected ? ` style="--class-color:${selected.color}"` : '';
+  // 24px to sit level with the 31px select rather than floating in it. Sourced from
+  // the 56px file, not 36px: at devicePixelRatio 2 a 24px box needs 48 real pixels.
   const icon = selected
-    ? `<img class="class-icon" src="${iconUrl(selected.icon, 36)}" alt="" width="18" height="18"
+    ? `<img class="class-icon" src="${iconUrl(selected.icon, 56)}" alt="" width="24" height="24"
          onerror="this.style.visibility='hidden'">`
     : '';
 

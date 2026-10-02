@@ -55,8 +55,10 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
   // they sit pending until some later layout pass and the icons just never appear.
   // There is nothing to gain anyway -- only the few spells in the current macro are
   // ever rendered, at 1-2 kB each.
+  // The 56px source, not 36px: a 20px box on a 2x display needs 40 real pixels, so the
+  // 36px file was being upscaled very slightly.
   const icon = row.spell?.icon
-    ? `<img class="spell-icon" src="${iconUrl(row.spell.icon, 36)}" alt="" width="20" height="20"
+    ? `<img class="spell-icon" src="${iconUrl(row.spell.icon, 56)}" alt="" width="20" height="20"
          onerror="this.style.visibility='hidden'">`
     : '';
 
