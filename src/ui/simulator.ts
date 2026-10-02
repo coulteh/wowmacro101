@@ -178,10 +178,13 @@ export function renderCharacter(flavour: FlavourId, classId: number): string {
          onerror="this.style.visibility='hidden'">`
     : '';
 
+  // No visible "class" label: the legend already says "You are a". The select still
+  // needs an accessible name, so that moves to aria-label rather than disappearing.
   return '<fieldset class="sim-section" id="character"><legend>You are a</legend>'
     + `<div class="sim-controls class-picker${selected ? ' has-class' : ''}"${style}>`
-    + `<label class="sim-field"><span>class</span>${icon}`
-    + `<select data-path="class" data-type="number">${options}</select></label>`
+    + `<div class="sim-field">${icon}`
+    + '<select data-path="class" data-type="number" aria-label="Class">'
+    + `${options}</select></div>`
     + '</div></fieldset>';
 }
 
