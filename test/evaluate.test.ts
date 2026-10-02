@@ -194,7 +194,8 @@ describe('why a clause was skipped', () => {
       for (const clause of line.clauses) {
         for (const group of clause.groups) {
           for (const cond of group.conditions) {
-            out[cond.raw] = result.byCondition.get(cond.id);
+            // Only conditions that were actually judged; unit redirects are not.
+            if (result.byCondition.has(cond.id)) out[cond.raw] = result.byCondition.get(cond.id);
           }
         }
       }
@@ -218,13 +219,24 @@ describe('why a clause was skipped', () => {
   });
 
   it('evaluates conditions against their own group unit', () => {
-    const result = conditions('/cast [@focus,help][help] Heal', (s) => {
+    // Target is hostile, focus is friendly, so [help] must pass when redirected.
+    const redirected = conditions('/cast [@focus,help] Heal; Smite', (s) => {
       s.units.focus = { exists: true, reaction: 'friendly', dead: false, inParty: true, inRaid: false };
       s.units.target = { exists: true, reaction: 'hostile', dead: false, inParty: false, inRaid: false };
     });
-    // Both groups contain a `help` condition but they test different units, so the
-    // keyed-by-text map collapses them -- assert via the clause instead.
-    expect(result['@focus']).toBe(true);
+    expect(redirected.help).toBe(true);
+
+    const notRedirected = conditions('/cast [help] Heal; Smite', (s) => {
+      s.units.target = { exists: true, reaction: 'hostile', dead: false, inParty: false, inRaid: false };
+    });
+    expect(notRedirected.help).toBe(false);
+  });
+
+  it('gives no pass/fail verdict to a unit redirect', () => {
+    // It is not a test, so a tick beside it would imply a check that is not happening.
+    const result = conditions('/cast [@focus,help] Heal; Smite');
+    expect(result).not.toHaveProperty('@focus');
+    expect(result).toHaveProperty('help');
   });
 
   it('covers negation correctly', () => {

@@ -103,7 +103,10 @@ export function evaluateGroup(group: CondGroup, state: SimState): GroupEvaluatio
   const unit = unitFor(group, state);
   const results = group.conditions.map((c) => {
     const truth = evaluateCondition(c, state, unit);
-    conditions.set(c.id, truth);
+    // Unit redirects are not tests -- they choose who the tests apply to -- so they
+    // get no pass/fail marker. A tick beside [@mouseover] implies a check that is not
+    // happening.
+    if (c.kind !== 'unit') conditions.set(c.id, truth);
     return truth;
   });
   return { truth: and(results), conditions };

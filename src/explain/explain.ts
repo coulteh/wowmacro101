@@ -157,8 +157,13 @@ function explainClause(
     }
     const label = unitLabelFor(group);
     for (const cond of group.conditions) {
+      const phrase = describeCondition(cond, label);
+      // Frame a test as a condition, not a fact. "You are holding Shift" next to a red
+      // cross reads as a contradiction; "Only if you are holding Shift" does not.
+      // Unit redirects are not tests and keep their own phrasing.
+      const text = cond.kind === 'unit' || !cond.def ? phrase : `only if ${phrase}`;
       children.push(row(
-        cond.id, 'condition', cond.raw, capitalise(describeCondition(cond, label)),
+        cond.id, 'condition', cond.raw, capitalise(text),
         [], cond.def || cond.kind === 'unit' ? undefined : 'error',
       ));
     }

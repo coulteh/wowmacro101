@@ -56,7 +56,8 @@ describe('condition rows', () => {
     const { rows } = explain('/cast [nocombat,@player] Renew');
     const conds = rows[0].children[0].children;
     expect(conds.map((c) => [c.chip, c.text])).toEqual([
-      ['nocombat', 'You are not in combat.'],
+      // A test is framed as a condition; a unit redirect is not a test.
+      ['nocombat', 'Only if you are not in combat.'],
       ['@player', 'Act on yourself instead of your current target.'],
     ]);
   });
@@ -65,10 +66,10 @@ describe('condition rows', () => {
     // This assertion used to enshrine "cannot receive your helpful spells (is
     // friendly)" -- negated verb, un-negated gloss, contradicting itself.
     expect(texts(explain('/cast [nohelp] Smite').rows)).toContain(
-      'Your current target cannot receive your helpful spells (is not friendly).',
+      'Only if your current target cannot receive your helpful spells (is not friendly).',
     );
     expect(texts(explain('/cast [noharm] Smite').rows)).toContain(
-      'Your current target is not attackable (not hostile).',
+      'Only if your current target is not attackable (not hostile).',
     );
   });
 
@@ -179,5 +180,36 @@ describe('description wording holds up under negation', () => {
       expect(negative, `[${def.name}] reads identically negated`).not.toBe(positive);
       expect(negative.length, `[${def.name}] has an empty negative form`).toBeGreaterThan(0);
     }
+  });
+});
+
+
+describe('condition rows read as conditions, not assertions', () => {
+  it('frames a test so a red cross does not contradict it', () => {
+    // "You are holding Shift" beside a cross reads as a false claim.
+    const { rows } = explain('/cast [mod:shift] Eviscerate; Sinister Strike');
+    const cond = rows[0].children[0].children.find((c) => c.chip === 'mod:shift')!;
+    expect(cond.text).toBe('Only if you are holding Shift.');
+    expect(cond.text).not.toBe('You are holding Shift.');
+  });
+
+  it('still describes a unit redirect as an action', () => {
+    const { rows } = explain('/cast [@focus] Polymorph');
+    const cond = rows[0].children[0].children.find((c) => c.chip === '@focus')!;
+    expect(cond.text).toBe('Act on your focus target instead of your current target.');
+    expect(cond.text).not.toMatch(/^Only if/);
+  });
+
+  it('leaves an unknown condition reading as the error it is', () => {
+    const { rows } = explain('/cast [combet] Fireball');
+    const cond = rows[0].children[0].children[0];
+    expect(cond.text).not.toMatch(/^Only if/);
+    expect(cond.severity).toBe('error');
+  });
+
+  it('keeps the clause sentence declarative', () => {
+    // The clause still narrates what happens; only the condition rows are reframed.
+    const { rows } = explain('/cast [mod:shift] Eviscerate; Sinister Strike');
+    expect(rows[0].children[0].text).toBe('If you are holding Shift, cast Eviscerate.');
   });
 });
