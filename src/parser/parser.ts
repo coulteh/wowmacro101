@@ -291,6 +291,7 @@ function parseClause(
       if (checkable) {
         checkSpellName(ctx, line, clause.arg);
         checkSpellClass(ctx, line, clause.arg);
+        checkSpellRank(ctx, line, clause.arg);
       }
     }
   }
@@ -469,6 +470,7 @@ function parseSequence(ctx: Ctx, line: Line, clause: Clause, arg: TextSpan): Seq
     seq.spells.push(step);
     checkSpellName(ctx, line, step);
     checkSpellClass(ctx, line, step);
+    checkSpellRank(ctx, line, step);
   }
   return seq;
 }
@@ -523,15 +525,38 @@ function splitRank(
  * warning rather than an info -- and it cannot false-positive, because a spell with no
  * class data returns 'unknown' and says nothing.
  */
-function checkSpellClass(ctx: Ctx, line: Line, span: TextSpan): void {
+function checkSpellClass(ctx: Ctx, line: Line, span: SpellArg): void {
   if (!ctx.spells || ctx.classId === ANY_CLASS) return;
-  const spell = ctx.spells.lookup(span.text.trim());
+  const spell = ctx.spells.lookup(span.text.trim(), span.rank);
   if (!spell || belongsToClass(spell, ctx.classId) !== false) return;
   const owners = spell.classes.join(' or ');
   ctx.issue(
     'warning',
     `${spell.name} is ${/^[AEIOU]/i.test(owners) ? 'an' : 'a'} ${owners} ability. `
     + `Your class is set to ${className(ctx.classId) ?? 'something else'}.`,
+    span, line.number,
+  );
+}
+
+/**
+ * Flags `(Rank N)` for a rank the spell does not have.
+ *
+ * Info, never louder, for the same reason an unrecognised name is: the bundled dataset
+ * lags a patch, and being confidently wrong about someone's macro is worse than silence.
+ * Says nothing at all when we have no rank data for the name -- an unknown must never be
+ * reported as a falsehood.
+ */
+function checkSpellRank(ctx: Ctx, line: Line, span: SpellArg): void {
+  if (!ctx.spells || !span.rank) return;
+  const name = span.text.trim();
+  const ranks = ctx.spells.ranksFor(name);
+  if (ranks.length === 0 || ranks.includes(span.rank)) return;
+  const highest = ranks[ranks.length - 1];
+  ctx.issue(
+    'info',
+    `${name} has ${ranks.length === 1 ? 'only rank 1' : `ranks 1 to ${highest}`} on `
+    + `${FLAVOURS[ctx.flavour].shortLabel}, so "(Rank ${span.rank})" will not match `
+    + `(build ${ctx.spells.build}).`,
     span, line.number,
   );
 }

@@ -79,6 +79,13 @@ The same principle governs severity: unrecognised spell names are **info**, flav
 mismatches are **warnings**, and only genuine syntax faults are **errors**. A spell
 missing from the dataset must never be an error — the data always lags a patch.
 
+Unranked resolution is the one place we answer a question the data cannot: `/cast Fireball`
+with no rank casts *the highest rank you know*, and we do not model level, so
+`SpellIndex.lookup` falls back to the highest rank present. That is the right answer for a
+trained character, which is what people write macros for. Asking for a rank that does not
+exist also falls back — `checkSpellRank` in the parser decides whether to say so, at info
+level, and says nothing at all when the spell has no rank data.
+
 **4. Flavours are data, not branches.** `src/flavours.ts` defines `retail` (Midnight),
 `forever` and `era`. Conditionals and commands carry
 `availability: { [flavour]: 'yes' | 'no' | 'unknown' }`; parser behaviour differences go
@@ -104,7 +111,7 @@ index is worse than an unlabelled one.
 
 `scripts/build-spell-data.mjs` joins wago.tools DB2 CSV exports into a committed JSON per
 flavour. Output columns: `name, id, iconIndex, castMs, rangeYd, cooldownMs, gcdMs,
-ambiguous, classMask`.
+ambiguous, classMask, rank`. **One row per `(name, rank)`**, not per name.
 
 Hard-won details:
 
@@ -121,6 +128,23 @@ Hard-won details:
   to ~23%, which is correct — the rest are professions, mounts and quest items.
 - **Read-time normalisation** in `createSpellIndex` masks class bits to the flavour's known
   classes and treats an "every class" mask as no class at all.
+- **Ranks come from `Spell.NameSubtext_lang`, and only `Rank N` counts.** That column also
+  holds `Racial Passive`, `Summon`, `Shapeshift`, form names (`Cat`, `Bear`, `Turtle`) and
+  the profession tiers `Apprentice`/`Journeyman`/`Expert`/`Artisan` — 139 of them on
+  Classic Era alone. None are addressable from a macro, so a strict `/^Rank (\d+)$/` is
+  the filter and everything else maps to rank 0. Read it through `readCsv`: this table's
+  `Description_lang` has embedded newlines, the same hazard as `ChrSpecialization`.
+- **The rank column is Classic-only, by choice rather than by data.** Retail's `Spell`
+  table still carries 5783 non-empty subtexts, all leftovers from before ranks were
+  removed; keying on them would split names that resolve fine today. `RANK_FLAVOURS` in
+  the generator mirrors `features.spellRanks`, duplicated because the script is plain
+  `.mjs`. Skipping it also avoids a 23 MB download retail has no use for.
+- **Rank splitting *reduces* ambiguity.** After the `wanted` filter, Fireball has 12 ids
+  for 12 ranks with no collisions; only ~8% of `(name, rank)` pairs still collide, and
+  those keep the "prefer learned, else lowest id" tiebreak.
+- **`spells.retail.json` is deliberately not regenerated for the rank column.**
+  `createSpellIndex` reads it as `row[9] ?? 0`, the same tolerance already applied to
+  `classMask`.
 
 ## Icons
 

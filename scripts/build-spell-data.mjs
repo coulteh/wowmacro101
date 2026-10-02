@@ -46,6 +46,17 @@ const PRODUCT_FLAVOUR = {
   wow_classic_era: 'era',
 };
 
+/**
+ * Flavours whose spell names carry a usable `(Rank N)`. Mirrors `features.spellRanks` in
+ * src/flavours.ts, duplicated because this script is plain .mjs and cannot import the TS
+ * flavour table.
+ *
+ * Retail is excluded deliberately rather than for lack of data: its Spell table still
+ * carries 5783 non-empty NameSubtext_lang values, all leftovers from before ranks were
+ * removed. Keying on them would split names that resolve perfectly well today.
+ */
+const RANK_FLAVOURS = new Set(['era', 'forever']);
+
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
@@ -332,6 +343,37 @@ async function collectCooldowns(path, wanted) {
 }
 
 /** name -> every player-facing spell id carrying it. */
+/**
+ * Spell id -> rank number, from `Spell.NameSubtext_lang`. 0 means "no rank".
+ *
+ * Only a literal `Rank N` counts. The same column also holds `Racial Passive`,
+ * `Passive`, `Summon`, `Shapeshift`, form names (`Cat`, `Bear`, `Turtle`) and the
+ * profession tiers `Apprentice`/`Journeyman`/`Expert`/`Artisan` -- 139 of them on Classic
+ * Era alone. None are addressable from a macro (`/cast Fishing(Rank 2)` is not a thing),
+ * so anything that is not `Rank N` maps to 0 and behaves exactly as it does today.
+ *
+ * Must go through readCsv: this table's Description_lang contains embedded newlines, the
+ * same hazard that silently corrupted the ChrSpecialization join.
+ */
+async function collectRanks(path, wanted) {
+  const out = new Map();
+  if (!path) return out;
+  let idIdx = -1;
+  let subIdx = -1;
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      idIdx = requireColumn(item.columns, 'Spell', 'ID');
+      subIdx = requireColumn(item.columns, 'Spell', 'NameSubtext_lang');
+      continue;
+    }
+    const id = Number(item.row[idIdx]);
+    if (!wanted.has(id)) continue;
+    const match = /^Rank (\d+)$/.exec((item.row[subIdx] ?? '').trim());
+    if (match) out.set(id, Number(match[1]));
+  }
+  return out;
+}
+
 async function collectNamesToIds(path, wanted) {
   const out = new Map();
   let total = 0;
@@ -586,6 +628,12 @@ async function main() {
   const castTimes = await collectLookup(await fetchTable('SpellCastTimes', build), 'SpellCastTimes', 'Base');
   const ranges = await collectLookup(await fetchTable('SpellRange', build), 'SpellRange', 'RangeMax_0');
   const cooldowns = await collectCooldowns(await fetchTable('SpellCooldowns', build), wanted);
+  // Classic lines only -- Spell is a 2 MB download there but 23 MB on retail, and retail
+  // has no addressable ranks to spend it on.
+  const ranks = RANK_FLAVOURS.has(flavour)
+    ? await collectRanks(await fetchTable('Spell', build, { required: false }), wanted)
+    : new Map();
+  if (RANK_FLAVOURS.has(flavour)) console.log(`  Spell: ${ranks.size} ids carry a (Rank N)`);
 
   // Icon names repeat heavily across spells, so intern them into a side table.
   const icons = [];
@@ -603,37 +651,52 @@ async function main() {
   let ambiguousNames = 0;
   let withIcon = 0;
   let withClass = 0;
+  let ranked = 0;
   for (const [name, ids] of byName) {
-    const candidates = [...ids].sort((a, b) => a - b);
-    // Prefer a spell the player actually learns over a talent-tree reference.
-    const id = candidates.find((candidate) => learned.has(candidate)) ?? candidates[0];
-    const ambiguous = candidates.length > 1;
-    if (ambiguous) ambiguousNames++;
+    // One row per (name, rank): on the Classic lines `/cast Fireball(Rank 3)` addresses a
+    // specific spell id, and collapsing all twelve Fireballs into one row made every rank
+    // resolve to Rank 1. Spells with no rank all land in group 0 and behave as before.
+    const byRank = new Map();
+    for (const id of [...ids].sort((a, b) => a - b)) {
+      const rank = ranks.get(id) ?? 0;
+      if (!byRank.has(rank)) byRank.set(rank, []);
+      byRank.get(rank).push(id);
+    }
 
-    // Union across every candidate: if any same-named spell could belong to the
-    // selected class, we must not warn. Under-warning beats a false accusation.
-    let classMask = 0;
-    for (const candidate of candidates) classMask |= classMasks.get(candidate) ?? 0;
-    if (classMask) withClass++;
+    for (const [rank, candidates] of [...byRank].sort((a, b) => a[0] - b[0])) {
+      // Prefer a spell the player actually learns over a talent-tree reference.
+      const id = candidates.find((candidate) => learned.has(candidate)) ?? candidates[0];
+      const ambiguous = candidates.length > 1;
+      if (ambiguous) ambiguousNames++;
+      if (rank) ranked++;
 
-    const entry = misc.get(id);
-    const icon = entry ? iconNames.get(entry.iconFileDataId) ?? null : null;
-    if (icon) withIcon++;
-    const cooldown = cooldowns.get(id);
+      // Union across every candidate: if any same-named spell could belong to the
+      // selected class, we must not warn. Under-warning beats a false accusation.
+      let classMask = 0;
+      for (const candidate of candidates) classMask |= classMasks.get(candidate) ?? 0;
+      if (classMask) withClass++;
 
-    spells.push([
-      name,
-      id,
-      internIcon(icon),
-      entry ? castTimes.get(entry.castIndex) ?? 0 : 0,
-      entry ? ranges.get(entry.rangeIndex) ?? 0 : 0,
-      cooldown ? cooldown.cooldownMs : 0,
-      cooldown ? cooldown.gcdMs : 0,
-      ambiguous ? 1 : 0,
-      classMask,
-    ]);
+      const entry = misc.get(id);
+      const icon = entry ? iconNames.get(entry.iconFileDataId) ?? null : null;
+      if (icon) withIcon++;
+      const cooldown = cooldowns.get(id);
+
+      spells.push([
+        name,
+        id,
+        internIcon(icon),
+        entry ? castTimes.get(entry.castIndex) ?? 0 : 0,
+        entry ? ranges.get(entry.rangeIndex) ?? 0 : 0,
+        cooldown ? cooldown.cooldownMs : 0,
+        cooldown ? cooldown.gcdMs : 0,
+        ambiguous ? 1 : 0,
+        classMask,
+        rank,
+      ]);
+    }
   }
-  spells.sort((a, b) => a[0].localeCompare(b[0], 'en'));
+  // Name first, then rank, so a diff between two builds stays readable.
+  spells.sort((a, b) => a[0].localeCompare(b[0], 'en') || a[9] - b[9]);
 
   const payload = {
     build,
@@ -645,8 +708,10 @@ async function main() {
     note:
       'Spells referenced by SkillLineAbility, SpecializationSpells or TraitDefinition. '
       + 'Deliberately over-inclusive: used only for soft hints, never hard validation. '
+      + 'One row per (name, rank). '
       + 'Columns: name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, '
-      + 'ambiguous, classMask (bit 0 = Warrior ... bit 12 = Evoker; 0 = no class).',
+      + 'ambiguous, classMask (bit 0 = Warrior ... bit 12 = Evoker; 0 = no class), '
+      + 'rank (0 = unranked; Classic lines only).',
     count: spells.length,
     icons,
     spells,
@@ -655,9 +720,10 @@ async function main() {
 
   const kb = (statSync(out).size / 1024).toFixed(0);
   console.log(`  ${total} spells scanned, ${wanted.size} player-facing ids`);
-  console.log(`  ${spells.length} names, ${withIcon} with an icon, ${icons.length} distinct icons`);
-  console.log(`  ${ambiguousNames} names map to more than one spell id (${(100 * ambiguousNames / spells.length).toFixed(1)}%)`);
-  console.log(`  ${withClass} names have class ownership (${(100 * withClass / spells.length).toFixed(1)}%)`);
+  console.log(`  ${spells.length} rows from ${byName.size} names, ${withIcon} with an icon, ${icons.length} distinct icons`);
+  console.log(`  ${ranked} rows carry a rank (${(100 * ranked / spells.length).toFixed(1)}%)`);
+  console.log(`  ${ambiguousNames} rows map to more than one spell id (${(100 * ambiguousNames / spells.length).toFixed(1)}%)`);
+  console.log(`  ${withClass} rows have class ownership (${(100 * withClass / spells.length).toFixed(1)}%)`);
   console.log(`  wrote ${out} (${kb} kB)`);
 }
 
