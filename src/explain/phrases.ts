@@ -25,12 +25,14 @@ export function unitLabelFor(group: CondGroup): string {
   return describeUnit(groupUnit(group) ?? 'target');
 }
 
-export function describeCondition(cond: Condition, unitLabel?: string): string {
+export function describeCondition(
+  cond: Condition, unitLabel?: string, classId?: number,
+): string {
   if (cond.kind === 'unit') {
     return `act on ${describeUnit(cond.unit ?? '')} instead of your current target`;
   }
   if (!cond.def) return `"${cond.name}" is not a condition the game understands`;
-  return cond.def.desc(cond.values.map((v) => v.text), cond.negated, unitLabel);
+  return cond.def.desc(cond.values.map((v) => v.text), cond.negated, unitLabel, classId);
 }
 
 /**
@@ -40,13 +42,13 @@ export function describeCondition(cond: Condition, unitLabel?: string): string {
  * "your mouseover is friendly, is not dead and exists" rather than repeating the
  * whole noun phrase each time.
  */
-export function describeGroupTests(group: CondGroup): string {
+export function describeGroupTests(group: CondGroup, classId?: number): string {
   const label = unitLabelFor(group);
   let labelUsed = false;
   const tests = group.conditions
     .filter((c) => c.kind !== 'unit')
     .map((c) => {
-      const phrase = describeCondition(c, label);
+      const phrase = describeCondition(c, label, classId);
       if (phrase.startsWith(`${label} `)) {
         if (labelUsed) return phrase.slice(label.length + 1);
         labelUsed = true;
@@ -85,9 +87,9 @@ export function hasAnyTests(groups: CondGroup[]): boolean {
 }
 
 /** OR-ed groups for the compact form: "(A and B) or C". */
-export function describeGroups(groups: CondGroup[]): string {
+export function describeGroups(groups: CondGroup[], classId?: number): string {
   const parts = groups.map((g) => {
-    const tests = describeGroupTests(g);
+    const tests = describeGroupTests(g, classId);
     if (!tests) return 'unconditionally';
     const multi = g.conditions.filter((c) => c.kind !== 'unit').length > 1;
     return groups.length > 1 && multi ? `(${tests})` : tests;

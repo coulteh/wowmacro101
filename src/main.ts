@@ -95,7 +95,7 @@ function renderOutputs(): void {
   }
   // The popover points at DOM we are about to replace.
   hideSpellTooltip();
-  explanationEl.innerHTML = renderExplanation(explainMacro(ast, { spells }), result, outcomes);
+  explanationEl.innerHTML = renderExplanation(explainMacro(ast, { spells, classId: state.classId }), result, outcomes);
   renderIssues();
   applyCaretHighlight();
 }

@@ -23,8 +23,9 @@ export interface ConditionalDef {
   /**
    * Plain-English phrase. Negation is handled here so wording stays natural.
    * `unit` is how to name the unit under test, e.g. 'the unit under your mouse cursor'.
+   * `classId` is the selected class, which lets [spec:N] name the specialisation.
    */
-  desc: (values: string[], negated: boolean, unit?: string) => string;
+  desc: (values: string[], negated: boolean, unit?: string, classId?: number) => string;
   note?: string;
   availability?: AvailabilityMap;
   flavourNotes?: Partial<Record<FlavourId, string>>;

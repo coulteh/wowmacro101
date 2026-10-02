@@ -35,6 +35,8 @@ export interface ExplRow {
 export interface ExplainOptions {
   /** Bundled spell data. Absent means no icons or tooltips, same as today. */
   spells?: SpellIndex | null;
+  /** Selected class, which lets [spec:N] be named rather than numbered. */
+  classId?: number;
 }
 
 export interface Explanation {
@@ -60,7 +62,7 @@ export function explainMacro(ast: MacroAst, options: ExplainOptions = {}): Expla
     const r = explainLine(ast, line, options);
     if (r) rows.push(r);
   }
-  return { summary: summarise(ast), rows };
+  return { summary: summarise(ast, options), rows };
 }
 
 /** The spell a row names, when the command actually takes a spell name. */
@@ -141,10 +143,10 @@ function explainClause(
     const action = clauseAction(line, clause, mode, sharedExplicitUnit(clause.groups));
     text = clause.index === 0 ? capitalise(action) : `Otherwise, ${action}.`;
   } else if (unitsDiffer(clause.groups)) {
-    text = `${describeGroupOutcomes(line, clause, mode)}.`;
+    text = `${describeGroupOutcomes(line, clause, mode, options.classId)}.`;
   } else {
     const action = clauseAction(line, clause, mode, sharedExplicitUnit(clause.groups));
-    const conds = describeGroups(clause.groups);
+    const conds = describeGroups(clause.groups, options.classId);
     const lead = clause.index === 0 ? 'If' : 'Otherwise, if';
     text = `${lead} ${conds}, ${action}.`;
   }
@@ -157,7 +159,7 @@ function explainClause(
     }
     const label = unitLabelFor(group);
     for (const cond of group.conditions) {
-      const phrase = describeCondition(cond, label);
+      const phrase = describeCondition(cond, label, options.classId);
       // Frame a test as a condition, not a fact. "You are holding Shift" next to a red
       // cross reads as a contradiction; "Only if you are holding Shift" does not.
       // Unit redirects are not tests and keep their own phrasing.
@@ -206,9 +208,11 @@ function explainClause(
  * your target". Used when the groups redirect to different units, where the compact
  * "A or B" form would describe two different behaviours as if they were one.
  */
-function describeGroupOutcomes(line: Line, clause: Clause, mode: 'do' | 'show'): string {
+function describeGroupOutcomes(
+  line: Line, clause: Clause, mode: 'do' | 'show', classId?: number,
+): string {
   const segments = clause.groups.map((group, gi) => {
-    const tests = describeGroupTests(group);
+    const tests = describeGroupTests(group, classId);
     const action = clauseAction(line, clause, mode, groupUnit(group) ?? 'target');
     if (!tests) return gi === 0 ? capitaliseFragment(action) : `otherwise ${action}`;
     const lead = gi === 0 ? (clause.index === 0 ? 'If' : 'Otherwise, if') : 'otherwise if';
@@ -266,7 +270,7 @@ function describeReset(parts: string[]): string {
 
 // --- Summary ---------------------------------------------------------------
 
-function summarise(ast: MacroAst): string {
+function summarise(ast: MacroAst, options: ExplainOptions = {}): string {
   const parts: string[] = [];
   const flavour = FLAVOURS[ast.flavour];
 
@@ -280,7 +284,7 @@ function summarise(ast: MacroAst): string {
 
   const steps = ast.lines
     .filter((l) => l.kind === 'command' && l.command?.def)
-    .map((l) => summariseLine(l))
+    .map((l) => summariseLine(l, options))
     .filter(Boolean) as string[];
 
   if (steps.length === 0) {
@@ -302,7 +306,7 @@ function summarise(ast: MacroAst): string {
   return parts.join(' ');
 }
 
-function summariseLine(line: Line): string | null {
+function summariseLine(line: Line, options: ExplainOptions = {}): string | null {
   const def = line.command?.def;
   if (!def) return null;
 
@@ -319,10 +323,10 @@ function summariseLine(line: Line): string | null {
         return i === 0 ? action : `otherwise ${action}`;
       }
       if (unitsDiffer(clause.groups)) {
-        return lowerFirst(describeGroupOutcomes(line, clause, 'do'));
+        return lowerFirst(describeGroupOutcomes(line, clause, 'do', options.classId));
       }
       const action = clauseAction(line, clause, 'do', sharedExplicitUnit(clause.groups));
-      const conds = describeGroups(clause.groups);
+      const conds = describeGroups(clause.groups, options.classId);
       return `${i === 0 ? 'if' : 'otherwise if'} ${conds}, ${action}`;
     })
     .filter(Boolean);

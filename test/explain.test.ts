@@ -213,3 +213,46 @@ describe('condition rows read as conditions, not assertions', () => {
     expect(rows[0].children[0].text).toBe('If you are holding Shift, cast Eviscerate.');
   });
 });
+
+describe('specialisations are named, not numbered', () => {
+  const explainAs = (src: string, classId: number) =>
+    explainMacro(parseMacro(src, 'retail'), { classId });
+
+  it('names the spec when the class is known', () => {
+    const all = texts(explainAs('/cast [spec:1] Mortal Strike; Slam', 1).rows);
+    expect(all).toContain('Only if your specialisation is Arms.');
+    expect(all.join(' ')).not.toMatch(/specialisation is number/);
+  });
+
+  it('names each spec of an either/or', () => {
+    expect(texts(explainAs('/cast [spec:2/3] X; Y', 1).rows))
+      .toContain('Only if your specialisation is Fury or Protection.');
+  });
+
+  it('handles the fourth Druid spec', () => {
+    expect(texts(explainAs('/cast [spec:4] Rejuvenation; Wrath', 11).rows))
+      .toContain('Only if your specialisation is Restoration.');
+  });
+
+  it('negates naturally', () => {
+    expect(texts(explainAs('/cast [nospec:1] X; Y', 1).rows))
+      .toContain('Only if your specialisation is not Arms.');
+  });
+
+  it('falls back to the number with no class chosen', () => {
+    const all = texts(explainMacro(parseMacro('/cast [spec:2] X; Y', 'retail')).rows);
+    expect(all).toContain('Only if your active specialisation is number 2.');
+  });
+
+  it('falls back when the number is out of range for the class', () => {
+    // Warriors have three specs, so [spec:4] cannot be named.
+    expect(texts(explainAs('/cast [spec:4] X; Y', 1).rows))
+      .toContain('Only if your active specialisation is number 4.');
+  });
+
+  it('names the spec in the clause sentence and the summary too', () => {
+    const { rows, summary } = explainAs('/cast [spec:3] Shield Slam; Slam', 1);
+    expect(rows[0].children[0].text).toBe('If your specialisation is Protection, cast Shield Slam.');
+    expect(summary).toContain('your specialisation is Protection');
+  });
+});

@@ -4,6 +4,7 @@
 // plain-English explanation, and it evaluates itself against a simulated situation.
 // Keeping those together is what stops the explainer and the simulator drifting apart.
 
+import { specsFor } from './classes';
 import type { ConditionalDef, EvalContext, Truth } from './types';
 
 const no = (n: boolean) => (n ? 'not ' : '');
@@ -212,7 +213,16 @@ export const CONDITIONALS: ConditionalDef[] = [
     name: 'spec', category: 'Player', value: 'required', values: ['1', '2', '3', '4'],
     strictValues: true,
     short: 'Active specialisation',
-    desc: (v, n) => `your active specialisation is ${no(n)}number ${or(v)}`,
+    // Named when we know the class, because "specialisation 2" means nothing on its own.
+    desc: (v, n, _u, classId) => {
+      const specs = specsFor(classId ?? 0);
+      const named = v
+        .map((value) => specs[Number(value) - 1])
+        .filter((name): name is string => Boolean(name));
+      return named.length === v.length && named.length
+        ? `your specialisation is ${no(n)}${or(named)}`
+        : `your active specialisation is ${no(n)}number ${or(v)}`;
+    },
     test: (ctx) => ctx.values.some((v) => Number(v) === ctx.state.spec),
     availability: { era: 'no' },
     flavourNotes: {
