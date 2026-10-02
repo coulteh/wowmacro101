@@ -44,7 +44,8 @@ export const FLAVOURS: Record<FlavourId, Flavour> = {
     note:
       'Forever launches 4 Nov 2026 and runs the modern macro engine over vanilla content, ' +
       'so the syntax matches Retail. Which conditionals are actually meaningful is still ' +
-      'being confirmed — treat flavour-specific notes as provisional.',
+      'being confirmed — treat flavour-specific notes as provisional. No spell data has ' +
+      'been published for its build yet, so spell icons and name checking are unavailable here.',
     features: { spellRanks: false },
   },
 };

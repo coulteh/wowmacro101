@@ -9,6 +9,7 @@ import { MACRO_CHAR_LIMIT, type Issue, type MacroAst } from './parser/types';
 import { evaluateMacro } from './sim/evaluate';
 import { defaultSimState, type SimState } from './sim/state';
 import { renderExplanation, type Outcomes } from './ui/explanation';
+import { hideSpellTooltip, initSpellTooltip } from './ui/tooltip';
 import { escapeHtml, highlightHtml, nodeAtOffset } from './ui/highlight';
 import { readPermalink, writePermalink } from './ui/permalink';
 import { REF_TABS, renderReference, type RefTab } from './ui/reference';
@@ -88,7 +89,9 @@ function renderOutputs(): void {
       outcomes.set(clause.id, capitalise(`${prefix}${action}`));
     }
   }
-  explanationEl.innerHTML = renderExplanation(explainMacro(ast), result, outcomes);
+  // The popover points at DOM we are about to replace.
+  hideSpellTooltip();
+  explanationEl.innerHTML = renderExplanation(explainMacro(ast, { spells }), result, outcomes);
   renderIssues();
   applyCaretHighlight();
 }
@@ -293,6 +296,7 @@ function bind(): void {
     highlightNode(row?.dataset.node ?? null);
   });
   explanationEl.addEventListener('mouseleave', () => highlightNode(null));
+  initSpellTooltip(explanationEl, (name) => spells?.lookup(name) ?? null);
 
   issuesEl.addEventListener('click', (event) => {
     const item = (event.target as HTMLElement).closest<HTMLElement>('.issue');

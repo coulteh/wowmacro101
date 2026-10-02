@@ -20,6 +20,8 @@ export interface ClauseResult {
   firedGroupId: NodeId | null;
   /** The unit that group acts on, for describing the outcome. */
   unit: string | null;
+  /** Every condition in the clause and how it came out, so the UI can show why. */
+  conditions: Map<NodeId, Truth>;
 }
 
 export interface LineResult {
@@ -36,6 +38,8 @@ export interface LineResult {
 export interface SimResult {
   lines: LineResult[];
   byClause: Map<NodeId, ClauseResult>;
+  /** Flattened per-condition results: this is what turns "skipped" into "why". */
+  byCondition: Map<NodeId, Truth>;
   /** Clause ids that definitely fire, in execution order. */
   firing: NodeId[];
   stopped: boolean;
@@ -84,30 +88,52 @@ export function evaluateCondition(cond: Condition, state: SimState, unit: UnitSt
   return cond.negated ? negate(raw) : raw;
 }
 
-export function evaluateGroup(group: CondGroup, state: SimState): Truth {
-  if (group.empty || group.conditions.length === 0) return true;
+export interface GroupEvaluation {
+  truth: Truth;
+  conditions: Map<NodeId, Truth>;
+}
+
+/**
+ * Note this does not short-circuit: every condition is evaluated so the UI can show
+ * which one failed. `and()` would be the same answer either way.
+ */
+export function evaluateGroup(group: CondGroup, state: SimState): GroupEvaluation {
+  const conditions = new Map<NodeId, Truth>();
+  if (group.empty || group.conditions.length === 0) return { truth: true, conditions };
   const unit = unitFor(group, state);
-  return and(group.conditions.map((c) => evaluateCondition(c, state, unit)));
+  const results = group.conditions.map((c) => {
+    const truth = evaluateCondition(c, state, unit);
+    conditions.set(c.id, truth);
+    return truth;
+  });
+  return { truth: and(results), conditions };
 }
 
 export function evaluateClause(clause: Clause, state: SimState): {
-  truth: Truth; firedGroupId: NodeId | null; unit: string | null;
+  truth: Truth; firedGroupId: NodeId | null; unit: string | null; conditions: Map<NodeId, Truth>;
 } {
+  const conditions = new Map<NodeId, Truth>();
   if (clause.groups.length === 0) {
-    return { truth: true, firedGroupId: null, unit: null };
+    return { truth: true, firedGroupId: null, unit: null, conditions };
   }
-  const results = clause.groups.map((g) => ({ group: g, truth: evaluateGroup(g, state) }));
+  const results = clause.groups.map((group) => {
+    const evaluation = evaluateGroup(group, state);
+    for (const [id, truth] of evaluation.conditions) conditions.set(id, truth);
+    return { group, truth: evaluation.truth };
+  });
   const winner = results.find((r) => r.truth === true) ?? results.find((r) => r.truth === 'unknown');
   return {
     truth: or(results.map((r) => r.truth)),
     firedGroupId: winner ? winner.group.id : null,
     unit: winner ? groupUnitToken(winner.group) : null,
+    conditions,
   };
 }
 
 export function evaluateMacro(ast: MacroAst, state: SimState): SimResult {
   const lines: LineResult[] = [];
   const byClause = new Map<NodeId, ClauseResult>();
+  const byCondition = new Map<NodeId, Truth>();
   const firing: NodeId[] = [];
 
   let stopped = false;
@@ -130,7 +156,8 @@ export function evaluateMacro(ast: MacroAst, state: SimState): SimResult {
     let uncertain = false;
 
     for (const clause of line.clauses) {
-      const { truth, firedGroupId, unit } = evaluateClause(clause, state);
+      const { truth, firedGroupId, unit, conditions } = evaluateClause(clause, state);
+      for (const [id, value] of conditions) byCondition.set(id, value);
       let verdict: Verdict;
 
       if (!result.executed || settled) {
@@ -145,7 +172,9 @@ export function evaluateMacro(ast: MacroAst, state: SimState): SimResult {
         verdict = 'skipped';
       }
 
-      const cr: ClauseResult = { id: clause.id, index: clause.index, truth, verdict, firedGroupId, unit };
+      const cr: ClauseResult = {
+        id: clause.id, index: clause.index, truth, verdict, firedGroupId, unit, conditions,
+      };
       result.clauses.push(cr);
       byClause.set(clause.id, cr);
 
@@ -166,5 +195,5 @@ export function evaluateMacro(ast: MacroAst, state: SimState): SimResult {
     }
   }
 
-  return { lines, byClause, firing, stopped };
+  return { lines, byClause, byCondition, firing, stopped };
 }

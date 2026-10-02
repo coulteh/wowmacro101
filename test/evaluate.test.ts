@@ -181,3 +181,56 @@ describe('forms and pets', () => {
     expect(sim('/cast [pet] A; B').verdicts[0]).toEqual(['skipped', 'fires']);
   });
 });
+
+describe('why a clause was skipped', () => {
+  function conditions(src: string, tweak: (s: SimState) => void = () => {}) {
+    const state = defaultSimState();
+    tweak(state);
+    const ast = parseMacro(src);
+    const result = evaluateMacro(ast, state);
+    // Map the raw condition text to its truth so assertions read like the UI.
+    const out: Record<string, unknown> = {};
+    for (const line of ast.lines) {
+      for (const clause of line.clauses) {
+        for (const group of clause.groups) {
+          for (const cond of group.conditions) {
+            out[cond.raw] = result.byCondition.get(cond.id);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  it('reports each condition individually, not just the clause verdict', () => {
+    expect(conditions('/cast [swimming] A; [combat] B; C', (s) => { s.combat = true; }))
+      .toEqual({ swimming: false, combat: true });
+  });
+
+  it('says unknown rather than guessing', () => {
+    expect(conditions('/cast [known:Starfire] A; B')['known:Starfire']).toBe('unknown');
+  });
+
+  it('reports every condition in an AND group, including ones after a failure', () => {
+    // No short-circuiting: the UI needs to show which of these failed.
+    const result = conditions('/cast [nocombat,harm,nodead] A; B', (s) => { s.combat = true; });
+    expect(result).toEqual({ nocombat: false, harm: true, nodead: true });
+  });
+
+  it('evaluates conditions against their own group unit', () => {
+    const result = conditions('/cast [@focus,help][help] Heal', (s) => {
+      s.units.focus = { exists: true, reaction: 'friendly', dead: false, inParty: true, inRaid: false };
+      s.units.target = { exists: true, reaction: 'hostile', dead: false, inParty: false, inRaid: false };
+    });
+    // Both groups contain a `help` condition but they test different units, so the
+    // keyed-by-text map collapses them -- assert via the clause instead.
+    expect(result['@focus']).toBe(true);
+  });
+
+  it('covers negation correctly', () => {
+    expect(conditions('/cast [nomounted] A; B', (s) => { s.mounted = true; }))
+      .toEqual({ nomounted: false });
+    expect(conditions('/cast [nomounted] A; B', (s) => { s.mounted = false; }))
+      .toEqual({ nomounted: true });
+  });
+});

@@ -1,7 +1,9 @@
 // Turns an AST into the nested token -> English rows shown in the explanation pane.
 // Pure: no DOM, no formatting decisions beyond the wording itself.
 
+import type { SpellIndex, SpellRecord } from '../data/spells';
 import { describeUnit } from '../data/units';
+import { SPELL_NAME_COMMANDS } from '../parser/parser';
 import { FLAVOURS } from '../flavours';
 import type { Clause, Line, MacroAst, NodeId, Severity } from '../parser/types';
 import {
@@ -25,7 +27,14 @@ export interface ExplRow {
   /** Plain-English description shown on the right. */
   text: string;
   severity?: Severity;
+  /** Resolved spell, when this row names one. Drives the icon and tooltip. */
+  spell?: SpellRecord;
   children: ExplRow[];
+}
+
+export interface ExplainOptions {
+  /** Bundled spell data. Absent means no icons or tooltips, same as today. */
+  spells?: SpellIndex | null;
 }
 
 export interface Explanation {
@@ -36,21 +45,34 @@ export interface Explanation {
 let rowSeq = 0;
 function row(
   id: NodeId, kind: RowKind, chip: string, text: string,
-  children: ExplRow[] = [], severity?: Severity,
+  children: ExplRow[] = [], severity?: Severity, spell?: SpellRecord,
 ): ExplRow {
-  return { id: id || `r${++rowSeq}`, kind, chip, text, children, ...(severity ? { severity } : {}) };
+  return {
+    id: id || `r${++rowSeq}`, kind, chip, text, children,
+    ...(severity ? { severity } : {}),
+    ...(spell ? { spell } : {}),
+  };
 }
 
-export function explainMacro(ast: MacroAst): Explanation {
+export function explainMacro(ast: MacroAst, options: ExplainOptions = {}): Explanation {
   const rows: ExplRow[] = [];
   for (const line of ast.lines) {
-    const r = explainLine(ast, line);
+    const r = explainLine(ast, line, options);
     if (r) rows.push(r);
   }
   return { summary: summarise(ast), rows };
 }
 
-function explainLine(ast: MacroAst, line: Line): ExplRow | null {
+/** The spell a row names, when the command actually takes a spell name. */
+function spellFor(line: Line, text: string, options: ExplainOptions): SpellRecord | undefined {
+  if (!options.spells || !text) return undefined;
+  const command = line.command?.name.toLowerCase();
+  const takesSpell = line.kind === 'meta' || (command !== undefined && SPELL_NAME_COMMANDS.has(command));
+  if (!takesSpell) return undefined;
+  return options.spells.lookup(text) ?? undefined;
+}
+
+function explainLine(ast: MacroAst, line: Line, options: ExplainOptions): ExplRow | null {
   switch (line.kind) {
     case 'blank':
       return null;
@@ -69,7 +91,7 @@ function explainLine(ast: MacroAst, line: Line): ExplRow | null {
       const name = line.meta?.name ?? '#showtooltip';
       const def = line.meta?.def;
       const children = line.clauses
-        .map((c) => explainClause(ast, line, c, 'show'))
+        .map((c) => explainClause(ast, line, c, 'show', options))
         .filter((c): c is ExplRow => c !== null);
       const text = line.clauses.some((c) => c.arg?.text)
         ? def?.short ?? 'Chooses what the button displays.'
@@ -93,7 +115,7 @@ function explainLine(ast: MacroAst, line: Line): ExplRow | null {
       }
 
       const children = line.clauses
-        .map((c) => explainClause(ast, line, c, 'do'))
+        .map((c) => explainClause(ast, line, c, 'do', options))
         .filter((c): c is ExplRow => c !== null);
       return row(line.id, 'line', name, def.short, children);
     }
@@ -101,7 +123,7 @@ function explainLine(ast: MacroAst, line: Line): ExplRow | null {
 }
 
 function explainClause(
-  ast: MacroAst, line: Line, clause: Clause, mode: 'do' | 'show',
+  ast: MacroAst, line: Line, clause: Clause, mode: 'do' | 'show', options: ExplainOptions,
 ): ExplRow | null {
   const hasGroups = clause.groups.length > 0;
   const hasArg = Boolean(clause.arg?.text);
@@ -161,11 +183,15 @@ function explainClause(
       children.push(row(
         `${clause.id}-step${i}`, 'step', s.text,
         `Step ${i + 1} of ${seq.spells.length}. Only a successful cast advances the sequence.`,
+        [], undefined, spellFor(line, s.text, options),
       ));
     });
   }
 
-  return row(clause.id, 'clause', chip, text, children);
+  return row(
+    clause.id, 'clause', chip, text, children, undefined,
+    clause.arg ? spellFor(line, clause.arg.text, options) : undefined,
+  );
 }
 
 /**

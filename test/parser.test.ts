@@ -279,6 +279,7 @@ describe('soft spell validation', () => {
     build: '12.1.0.69933',
     count: 2,
     has: (name: string) => ['fireball', 'steady shot'].includes(name.trim().toLowerCase()),
+    lookup: () => null,
   };
 
   it('stays silent with no dataset loaded', () => {

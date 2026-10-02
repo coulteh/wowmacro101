@@ -21,7 +21,7 @@ import {
 
 const RESET_KEYWORDS = new Set(['combat', 'target', 'shift', 'ctrl', 'alt']);
 /** Commands whose argument is a spell or aura name worth checking against the dataset. */
-const SPELL_NAME_COMMANDS = new Set([
+export const SPELL_NAME_COMMANDS = new Set([
   '/cast', '/spell', '/castsequence', '/castrandom', '/cancelaura',
 ]);
 /** Commands that actually cast a spell, for the "one cast per press" check. */

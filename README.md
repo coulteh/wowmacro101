@@ -13,9 +13,13 @@ new player as `(?<=\b)`, and the in-game macro editor gives you no feedback what
 - **Live explanation.** Every command, clause, condition and unit redirect gets a
   plain-English line. Hover a row to light up the matching text; move the caret and the
   matching row highlights back.
+- **Real spell identity.** Spells show their actual in-game icon, and hovering (or
+  tab-focusing) one gives cast time, range, cooldown, spell id and a link to the full
+  Wowhead tooltip.
 - **Situation simulator.** Toggle combat, modifiers, forms, and what each unit slot looks
   like. The explanation then marks each clause *runs* / *skipped* / *might run* / *not
-  reached* and states the concrete outcome, including which unit it landed on.
+  reached*, states the concrete outcome including which unit it landed on, and marks
+  every individual condition ✓ / ✗ / ? so you can see *why* a clause was skipped.
 - **Real diagnostics.** Unknown commands and conditions (with "did you mean"), unclosed
   brackets, the 255-character limit, conditionals on chat commands, `#showtooltip` in the
   wrong place, and the classic mistake of putting two `/cast` lines in one macro.
@@ -81,10 +85,48 @@ reports that Fireball does not exist. That is the one failure this feature canno
 `test/spells.test.ts` guards it by asserting the modern class kit is present and that
 every spell in the bundled examples resolves.
 
-The result is ~19,000 names in about 400 kB. It deliberately **over-includes**: validation
-is soft, so staying quiet about a real spell costs far less than telling someone their
-spell does not exist. An unrecognised name is always an **info**, never an error, and the
-dataset will always lag a patch.
+It deliberately **over-includes**: validation is soft, so staying quiet about a real
+spell costs far less than telling someone their spell does not exist. An unrecognised
+name is always an **info**, never an error, and the dataset will always lag a patch.
+
+The same script resolves each spell's icon and metadata:
+
+| Table | Gives |
+| --- | --- |
+| `SpellMisc` | icon file id, cast-time index, range index (base difficulty only) |
+| `ManifestInterfaceData` | file id → icon name, e.g. `spell_fire_flamebolt` |
+| `SpellCastTimes`, `SpellRange`, `SpellCooldowns` | the placeholder-free numbers |
+
+`ManifestInterfaceData` is what makes this cheap — it removes any need for the 152 MB
+community listfile. Result: 19,150 names, 99.7% with an icon, 5,839 distinct icons,
+1,057 kB raw / ~310 kB gzipped in its own lazily-fetched chunk. The app shell stays at
+about 21 kB and renders before the data arrives.
+
+Where one name maps to several spell ids (8.3% of them — `Avenging Wrath` has four), the
+build prefers an id the player actually learns over a talent-tree reference, then the
+lowest id. The tooltip always shows the spell id and flags the ambiguity, because the
+game resolves `/cast Fireball` against *your* spellbook and we cannot know it.
+
+### Why there is no spell description
+
+`Spell.db2` descriptions are templates, not text: **67%** contain `$` placeholders like
+`"Deals $s1 Frost damage to the target."`, resolved at runtime from effect values,
+scaling curves and caster stats we do not have. Rendering them would show visible junk,
+and computing them would be frequently wrong. So the tooltip shows only facts that are
+true as written, and links to Wowhead for the rest.
+
+### Icons and privacy
+
+Icons are **hotlinked from Blizzard's own CDN** (`render.worldofwarcraft.com`), not
+copied into this repo. We host and redistribute nothing, which is the defensible
+position for a non-commercial fan tool — bundling the 6,034 icons (~9.1 MB at 36 px)
+would be the redistribution case instead.
+
+The cost is that viewing a macro sends the viewer's IP to Blizzard, and the app is no
+longer fully offline — icons simply go missing, with explanation and simulation
+unaffected. The host lives in a single `ICON_BASE` constant in `src/data/spells.ts`, and
+the dataset stores icon *names* rather than URLs, so switching to self-hosted files or a
+caching proxy is a one-line change if hotlinking ever stops working.
 
 There is no `spells.forever.json`: wago.tools exposes only `wow` and `wowxptr` products,
 with no 1.60.x build, so Forever spell data is not sourceable yet. The app handles its

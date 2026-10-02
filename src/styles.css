@@ -446,3 +446,72 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
 .kind-outcome > .expl-head .chip { color: var(--ok); }
 .kind-outcome > .expl-head { background: color-mix(in srgb, var(--ok) 8%, transparent); }
 .kind-outcome > .expl-head .expl-text { color: var(--ok); }
+
+/* --- Spell icons, tooltip and condition markers --------------------------- */
+
+.spell-icon {
+  vertical-align: -4px;
+  margin-right: 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.chip-spell { cursor: help; }
+.chip-spell:hover,
+.chip-spell:focus-visible { border-color: var(--accent); color: var(--text); }
+
+.cond-mark {
+  flex: 0 0 auto;
+  width: 1em;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mark-pass { color: var(--ok); }
+.mark-fail { color: var(--error); }
+.mark-unsure { color: var(--warning); }
+
+.spell-tip {
+  position: absolute;
+  z-index: 40;
+  max-width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.spell-tip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.spell-tip-icon { border-radius: 4px; border: 1px solid var(--border); }
+
+/* One pair per row: two columns cramped "No cooldown" onto two lines. */
+.spell-tip-facts { display: grid; gap: 1px; margin: 0; }
+.spell-tip-facts div { display: flex; justify-content: space-between; gap: 16px; }
+.spell-tip-facts dt { color: var(--text-dim); }
+.spell-tip-facts dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.spell-tip-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+.spell-tip-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.site-foot {
+  margin: 0;
+  padding: 16px 24px 32px;
+  color: var(--text-faint);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+}
+.site-foot a { color: var(--text-dim); }

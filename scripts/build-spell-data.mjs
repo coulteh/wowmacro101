@@ -21,7 +21,7 @@
  * does not exist.
  */
 
-import { createReadStream, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -142,11 +142,15 @@ function requireColumn(columns, table, ...candidates) {
 /**
  * Tables that imply a spell is player-facing, and the columns holding a spell id.
  * Any one of them is enough to keep the spell.
+ *
+ * `learned` marks the tables that represent something a player actually trains or is
+ * granted. When one name maps to several spell ids, those win over TraitDefinition,
+ * which often points at passives and override variants rather than the castable spell.
  */
 const SPELL_ID_SOURCES = [
-  { table: 'SkillLineAbility', columns: ['Spell'] },
-  { table: 'SpecializationSpells', columns: ['SpellID', 'OverridesSpellID'] },
-  { table: 'TraitDefinition', columns: ['SpellID', 'VisibleSpellID', 'OverridesSpellID'] },
+  { table: 'SkillLineAbility', columns: ['Spell'], learned: true },
+  { table: 'SpecializationSpells', columns: ['SpellID', 'OverridesSpellID'], learned: true },
+  { table: 'TraitDefinition', columns: ['SpellID', 'VisibleSpellID', 'OverridesSpellID'], learned: false },
 ];
 
 async function collectSpellIds(path, table, candidates, into) {
@@ -167,6 +171,120 @@ async function collectSpellIds(path, table, candidates, into) {
     }
   }
   return into;
+}
+
+/** spellId -> { iconFileDataId, castIndex, rangeIndex }, base difficulty only. */
+async function collectSpellMisc(path, wanted) {
+  const out = new Map();
+  let i = {};
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      i = {
+        spell: requireColumn(item.columns, 'SpellMisc', 'SpellID'),
+        icon: requireColumn(item.columns, 'SpellMisc', 'SpellIconFileDataID'),
+        cast: requireColumn(item.columns, 'SpellMisc', 'CastingTimeIndex'),
+        range: requireColumn(item.columns, 'SpellMisc', 'RangeIndex'),
+        difficulty: requireColumn(item.columns, 'SpellMisc', 'DifficultyID'),
+      };
+      continue;
+    }
+    // Per-difficulty rows exist; mixing them yields inconsistent icons.
+    if (item.row[i.difficulty] !== '0') continue;
+    const id = Number(item.row[i.spell]);
+    if (!wanted.has(id) || out.has(id)) continue;
+    out.set(id, {
+      iconFileDataId: Number(item.row[i.icon]) || 0,
+      castIndex: Number(item.row[i.cast]) || 0,
+      rangeIndex: Number(item.row[i.range]) || 0,
+    });
+  }
+  return out;
+}
+
+/** fileDataId -> icon name, e.g. 135812 -> 'spell_fire_flamebolt'. */
+async function collectIconNames(path, wanted) {
+  const out = new Map();
+  let i = {};
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      i = {
+        id: requireColumn(item.columns, 'ManifestInterfaceData', 'ID'),
+        path: requireColumn(item.columns, 'ManifestInterfaceData', 'FilePath'),
+        name: requireColumn(item.columns, 'ManifestInterfaceData', 'FileName'),
+      };
+      continue;
+    }
+    const id = Number(item.row[i.id]);
+    if (!wanted.has(id)) continue;
+    if (!/^interface[\\/]icons[\\/]?$/i.test(item.row[i.path].trim())) continue;
+    out.set(id, item.row[i.name].replace(/\.blp$/i, '').toLowerCase());
+  }
+  return out;
+}
+
+/** Simple id -> number lookup for the index tables. */
+async function collectLookup(path, table, valueColumn) {
+  const out = new Map();
+  let idIdx = -1;
+  let valIdx = -1;
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      idIdx = requireColumn(item.columns, table, 'ID');
+      valIdx = requireColumn(item.columns, table, valueColumn);
+      continue;
+    }
+    out.set(Number(item.row[idIdx]), Number(item.row[valIdx]) || 0);
+  }
+  return out;
+}
+
+/** spellId -> { cooldownMs, gcdMs }, base difficulty only. */
+async function collectCooldowns(path, wanted) {
+  const out = new Map();
+  let i = {};
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      i = {
+        spell: requireColumn(item.columns, 'SpellCooldowns', 'SpellID'),
+        recovery: requireColumn(item.columns, 'SpellCooldowns', 'RecoveryTime'),
+        category: requireColumn(item.columns, 'SpellCooldowns', 'CategoryRecoveryTime'),
+        start: requireColumn(item.columns, 'SpellCooldowns', 'StartRecoveryTime'),
+        difficulty: requireColumn(item.columns, 'SpellCooldowns', 'DifficultyID'),
+      };
+      continue;
+    }
+    if (item.row[i.difficulty] !== '0') continue;
+    const id = Number(item.row[i.spell]);
+    if (!wanted.has(id) || out.has(id)) continue;
+    out.set(id, {
+      cooldownMs: Math.max(Number(item.row[i.recovery]) || 0, Number(item.row[i.category]) || 0),
+      gcdMs: Number(item.row[i.start]) || 0,
+    });
+  }
+  return out;
+}
+
+/** name -> every player-facing spell id carrying it. */
+async function collectNamesToIds(path, wanted) {
+  const out = new Map();
+  let total = 0;
+  let idIdx = -1;
+  let nameIdx = -1;
+  for await (const item of readCsv(path)) {
+    if (item.columns) {
+      idIdx = requireColumn(item.columns, 'SpellName', 'ID');
+      nameIdx = requireColumn(item.columns, 'SpellName', 'Name_lang', 'Name');
+      continue;
+    }
+    total++;
+    const id = Number(item.row[idIdx]);
+    if (!wanted.has(id)) continue;
+    const name = (item.row[nameIdx] ?? '').trim();
+    if (!name) continue;
+    if (!out.has(name)) out.set(name, []);
+    out.get(name).push(id);
+  }
+  return { byName: out, total };
 }
 
 async function collectNames(path, wanted) {
@@ -196,35 +314,98 @@ async function main() {
 
   console.log(`Building spell data for ${product} ${build}`);
 
+  // Which spells count as player-facing, and which are actually trained/granted.
   const wanted = new Set();
-  for (const { table, columns } of SPELL_ID_SOURCES) {
-    const path = await fetchTable(table, build);
+  const learned = new Set();
+  for (const source of SPELL_ID_SOURCES) {
+    const path = await fetchTable(source.table, build);
+    const ids = await collectSpellIds(path, source.table, source.columns, new Set());
     const before = wanted.size;
-    await collectSpellIds(path, table, columns, wanted);
-    console.log(`  ${table}: +${wanted.size - before} spell ids (${wanted.size} total)`);
+    for (const id of ids) {
+      wanted.add(id);
+      if (source.learned) learned.add(id);
+    }
+    console.log(`  ${source.table}: +${wanted.size - before} spell ids (${wanted.size} total)`);
   }
 
-  const nameCsv = await fetchTable('SpellName', build);
-  console.log('  joining…');
-  const { names, total } = await collectNames(nameCsv, wanted);
+  const { byName, total } = await collectNamesToIds(await fetchTable('SpellName', build), wanted);
+  console.log(`  SpellName: ${byName.size} distinct player-facing names from ${total} rows`);
 
-  const sorted = [...names].sort((a, b) => a.localeCompare(b, 'en'));
+  const misc = await collectSpellMisc(await fetchTable('SpellMisc', build), wanted);
+  const iconFileIds = new Set();
+  for (const entry of misc.values()) {
+    if (entry.iconFileDataId) iconFileIds.add(entry.iconFileDataId);
+  }
+  const iconNames = await collectIconNames(
+    await fetchTable('ManifestInterfaceData', build), iconFileIds,
+  );
+  console.log(`  SpellMisc: ${misc.size} spells, ${iconFileIds.size} distinct icon files, ${iconNames.size} named`);
+
+  const castTimes = await collectLookup(await fetchTable('SpellCastTimes', build), 'SpellCastTimes', 'Base');
+  const ranges = await collectLookup(await fetchTable('SpellRange', build), 'SpellRange', 'RangeMax_0');
+  const cooldowns = await collectCooldowns(await fetchTable('SpellCooldowns', build), wanted);
+
+  // Icon names repeat heavily across spells, so intern them into a side table.
+  const icons = [];
+  const iconIndex = new Map();
+  const internIcon = (name) => {
+    if (!name) return -1;
+    if (!iconIndex.has(name)) {
+      iconIndex.set(name, icons.length);
+      icons.push(name);
+    }
+    return iconIndex.get(name);
+  };
+
+  const spells = [];
+  let ambiguousNames = 0;
+  let withIcon = 0;
+  for (const [name, ids] of byName) {
+    const candidates = [...ids].sort((a, b) => a - b);
+    // Prefer a spell the player actually learns over a talent-tree reference.
+    const id = candidates.find((candidate) => learned.has(candidate)) ?? candidates[0];
+    const ambiguous = candidates.length > 1;
+    if (ambiguous) ambiguousNames++;
+
+    const entry = misc.get(id);
+    const icon = entry ? iconNames.get(entry.iconFileDataId) ?? null : null;
+    if (icon) withIcon++;
+    const cooldown = cooldowns.get(id);
+
+    spells.push([
+      name,
+      id,
+      internIcon(icon),
+      entry ? castTimes.get(entry.castIndex) ?? 0 : 0,
+      entry ? ranges.get(entry.rangeIndex) ?? 0 : 0,
+      cooldown ? cooldown.cooldownMs : 0,
+      cooldown ? cooldown.gcdMs : 0,
+      ambiguous ? 1 : 0,
+    ]);
+  }
+  spells.sort((a, b) => a[0].localeCompare(b[0], 'en'));
+
   const payload = {
     build,
     product,
     generatedAt: new Date().toISOString(),
     source: 'https://wago.tools/db2',
-    sources: SPELL_ID_SOURCES.map((s) => s.table),
+    sources: SPELL_ID_SOURCES.map((entry) => entry.table),
     note:
       'Spells referenced by SkillLineAbility, SpecializationSpells or TraitDefinition. '
-      + 'Deliberately over-inclusive: used only for soft hints, never hard validation.',
-    count: sorted.length,
-    names: sorted,
+      + 'Deliberately over-inclusive: used only for soft hints, never hard validation. '
+      + 'Columns: name, id, iconIndex (-1 = none), castMs, rangeYd, cooldownMs, gcdMs, ambiguous.',
+    count: spells.length,
+    icons,
+    spells,
   };
-  writeFileSync(out, `${JSON.stringify(payload, null, 0)}\n`);
+  writeFileSync(out, `${JSON.stringify(payload)}\n`);
 
-  console.log(`  ${total} spells scanned, ${wanted.size} player-facing ids, ${sorted.length} distinct names`);
-  console.log(`  wrote ${out}`);
+  const kb = (statSync(out).size / 1024).toFixed(0);
+  console.log(`  ${total} spells scanned, ${wanted.size} player-facing ids`);
+  console.log(`  ${spells.length} names, ${withIcon} with an icon, ${icons.length} distinct icons`);
+  console.log(`  ${ambiguousNames} names map to more than one spell id (${(100 * ambiguousNames / spells.length).toFixed(1)}%)`);
+  console.log(`  wrote ${out} (${kb} kB)`);
 }
 
 main().catch((error) => {

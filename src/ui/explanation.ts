@@ -1,3 +1,5 @@
+import type { Truth } from '../data/types';
+import { iconUrl } from '../data/spells';
 import type { ExplRow, Explanation } from '../explain/explain';
 import type { SimResult, Verdict } from '../sim/evaluate';
 import { escapeHtml } from './highlight';
@@ -22,6 +24,18 @@ export function renderExplanation(
     + `<ul class="expl">${explanation.rows.map((r) => renderRow(r, sim, outcomes)).join('')}</ul>`;
 }
 
+/** Turns "skipped" into "why": which condition actually failed. */
+function conditionMarker(truth: Truth | undefined): string {
+  if (truth === undefined) return '';
+  const [symbol, cls, label] = truth === true
+    ? ['✓', 'pass', 'true']
+    : truth === false
+      ? ['✗', 'fail', 'false']
+      : ['?', 'unsure', 'cannot be determined'];
+  return `<span class="cond-mark mark-${cls}" title="This condition is ${label}"`
+    + ` aria-label="${label}">${symbol}</span>`;
+}
+
 function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): string {
   const verdict = sim?.byClause.get(row.id)?.verdict;
   const classes = ['expl-row', `kind-${row.kind}`];
@@ -31,8 +45,20 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
   const badge = verdict
     ? `<span class="verdict v-${verdict}">${VERDICT_LABEL[verdict]}</span>`
     : '';
-  // On a clause that actually runs, lead with the concrete result: with several OR
-  // groups, "runs" alone does not say which one won or which unit it landed on.
+
+  const marker = row.kind === 'condition' ? conditionMarker(sim?.byCondition.get(row.id)) : '';
+
+  // Explicit dimensions so a slow or failed icon load never shifts the layout.
+  const icon = row.spell?.icon
+    ? `<img class="spell-icon" src="${iconUrl(row.spell.icon, 36)}" alt="" width="20" height="20"
+         loading="lazy" onerror="this.style.visibility='hidden'">`
+    : '';
+
+  // Only spell-bearing chips are focusable, so the tooltip works without a mouse.
+  const spellAttrs = row.spell
+    ? ` data-spell="${escapeHtml(row.spell.name)}" tabindex="0"`
+    : '';
+
   const outcome = outcomes.get(row.id);
   const outcomeRow = outcome
     ? `<li class="expl-row kind-outcome"><div class="expl-head">`
@@ -46,8 +72,9 @@ function renderRow(row: ExplRow, sim: SimResult | null, outcomes: Outcomes): str
     : '';
 
   return `<li class="${classes.join(' ')}" data-node="${row.id}">`
-    + `<div class="expl-head">`
-    + `<code class="chip">${escapeHtml(row.chip)}</code>`
+    + `<div class="expl-head">${marker}`
+    + `<code class="chip${row.spell ? ' chip-spell' : ''}"${spellAttrs}>${icon}`
+    + `${escapeHtml(row.chip)}</code>`
     + `<span class="expl-text">${escapeHtml(row.text)}</span>${badge}`
     + `</div>${children}</li>`;
 }

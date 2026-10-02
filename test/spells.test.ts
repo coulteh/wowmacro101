@@ -1,16 +1,22 @@
+import { gzipSync } from 'node:zlib';
+import { readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import spellData from '../src/data/spells.retail.json';
-import { createSpellIndex, type SpellData } from '../src/data/spells';
+import {
+  createSpellIndex, formatCastTime, formatCooldown, formatRange, iconUrl, wowheadUrl,
+  ICON_BASE, type SpellData,
+} from '../src/data/spells';
 import { EXAMPLES } from '../src/data/examples';
 import { parseMacro } from '../src/parser/parser';
 
-const index = createSpellIndex(spellData as SpellData);
+const data = spellData as unknown as SpellData;
+const index = createSpellIndex(data);
 
 describe('bundled spell dataset', () => {
   it('is populated and labelled with its build', () => {
     expect(index.count).toBeGreaterThan(10_000);
-    expect(spellData.build).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
-    expect(spellData.sources).toContain('TraitDefinition');
+    expect(data.build).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    expect(data.sources).toContain('TraitDefinition');
   });
 
   it('knows the modern class kit, not just professions', () => {
@@ -27,6 +33,33 @@ describe('bundled spell dataset', () => {
     }
   });
 
+  // Real values verified against wago.tools build 12.1.0.69933 while planning. If the
+  // multi-table join breaks, these change -- which is the point of asserting them.
+  it.each([
+    ['Fireball', 133, 'spell_fire_flamebolt', 1750, 40],
+    ['Flash Heal', 2061, 'spell_holy_flashheal', 1500, 40],
+    ['Counterspell', 2139, 'spell_frost_iceshock', 0, 40],
+  ])('resolves %s to its real spell id, icon and metadata', (name, id, icon, castMs, rangeYd) => {
+    const spell = index.lookup(name as string)!;
+    expect(spell).toBeTruthy();
+    expect(spell.id).toBe(id);
+    expect(spell.icon).toBe(icon);
+    expect(spell.castMs).toBe(castMs);
+    expect(spell.rangeYd).toBe(rangeYd);
+  });
+
+  it('picks the castable spell when a name is ambiguous', () => {
+    // Avenging Wrath has four player-facing ids; 31884 is the real ability.
+    const spell = index.lookup('Avenging Wrath')!;
+    expect(spell.id).toBe(31884);
+    expect(spell.ambiguous).toBe(true);
+    expect(index.lookup('Flash Heal')!.ambiguous).toBe(false);
+  });
+
+  it('is case-insensitive and trims', () => {
+    expect(index.lookup('  fIREBALL ')!.id).toBe(133);
+  });
+
   it('recognises every spell used in the bundled examples', () => {
     // Otherwise the app contradicts its own examples the moment you load one.
     const complaints: string[] = [];
@@ -41,11 +74,53 @@ describe('bundled spell dataset', () => {
     expect(complaints).toEqual([]);
   });
 
+  it('has an icon for almost everything, including every example spell', () => {
+    const withIcon = data.spells.filter((row) => row[2] >= 0).length;
+    expect(withIcon / data.spells.length).toBeGreaterThan(0.95);
+
+    for (const name of ['Fireball', 'Flash Heal', 'Counterspell', 'Travel Form', 'Shadow Bolt']) {
+      expect(index.lookup(name)!.icon, `${name} should have an icon`).toBeTruthy();
+    }
+  });
+
   it('leaves the examples clean of errors and warnings too', () => {
     for (const example of EXAMPLES) {
       const ast = parseMacro(example.macro, 'retail', { spells: index });
       const bad = ast.issues.filter((i) => i.severity !== 'info');
       expect(bad.map((i) => i.message), `${example.title} should be clean`).toEqual([]);
     }
+  });
+
+  it('stays within the size budget it was planned against', () => {
+    const path = 'src/data/spells.retail.json';
+    const raw = statSync(path).size;
+    const gzipped = gzipSync(readFileSync(path)).length;
+    // Reported so a regression is visible rather than silent.
+    console.log(`    spells.retail.json: ${(raw / 1024).toFixed(0)} kB raw, `
+      + `${(gzipped / 1024).toFixed(0)} kB gzipped, ${data.icons.length} distinct icons`);
+    expect(gzipped).toBeLessThan(400 * 1024);
+  });
+});
+
+describe('icon and link helpers', () => {
+  it('builds CDN urls from the single ICON_BASE constant', () => {
+    expect(iconUrl('spell_fire_flamebolt', 36)).toBe(`${ICON_BASE}/36/spell_fire_flamebolt.jpg`);
+    expect(iconUrl('spell_fire_flamebolt')).toContain('/56/');
+  });
+
+  it('links to Wowhead by spell id', () => {
+    expect(wowheadUrl(133)).toBe('https://www.wowhead.com/spell=133');
+  });
+
+  it('formats facts the way a tooltip should read', () => {
+    expect(formatCastTime(0)).toBe('Instant');
+    expect(formatCastTime(1500)).toBe('1.5 sec cast');
+    expect(formatCastTime(2000)).toBe('2 sec cast');
+    expect(formatCastTime(1750)).toBe('1.75 sec cast');
+    expect(formatRange(0)).toBe('Self');
+    expect(formatRange(40)).toBe('40 yd range');
+    expect(formatCooldown(0)).toBe('No cooldown');
+    expect(formatCooldown(25_000)).toBe('25 sec cooldown');
+    expect(formatCooldown(120_000)).toBe('2 min cooldown');
   });
 });
