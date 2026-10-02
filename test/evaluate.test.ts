@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseMacro } from '../src/parser/parser';
 import { evaluateMacro } from '../src/sim/evaluate';
 import { defaultSimState, type SimState } from '../src/sim/state';
+import { hasPet, specsFor, WOW_CLASSES } from '../src/data/classes';
 
 function sim(src: string, tweak: (s: SimState) => void = () => {}) {
   const state = defaultSimState();
@@ -244,5 +245,39 @@ describe('why a clause was skipped', () => {
       .toEqual({ nomounted: false });
     expect(conditions('/cast [nomounted] A; B', (s) => { s.mounted = false; }))
       .toEqual({ nomounted: true });
+  });
+});
+
+describe('specialisation data', () => {
+  it('names specs in [spec:N] order for every class', () => {
+    // Read from ChrSpecialization (ClassID + OrderIndex) on build 12.1.0.69933.
+    expect(specsFor(1)).toEqual(['Arms', 'Fury', 'Protection']);
+    expect(specsFor(11)).toEqual(['Balance', 'Feral', 'Guardian', 'Restoration']);
+    expect(specsFor(12)).toContain('Devourer');
+    expect(specsFor(0)).toEqual([]);
+  });
+
+  it('gives every class three specs, except Druid with four', () => {
+    for (const c of WOW_CLASSES) {
+      const specs = specsFor(c.id);
+      expect(specs.length, `${c.name} spec count`).toBe(c.name === 'Druid' ? 4 : 3);
+      // The "Initial" starter spec is not something you can be.
+      expect(specs).not.toContain('Initial');
+    }
+  });
+
+  it('knows which classes have a commandable pet', () => {
+    // Temporary, uncontrollable summons do not count.
+    expect(hasPet('retail', 3)).toBe(true);    // Hunter
+    expect(hasPet('retail', 9)).toBe(true);    // Warlock
+    expect(hasPet('retail', 1)).toBe(false);   // Warrior
+    expect(hasPet('retail', 11)).toBe(false);  // Druid: treants are not commandable
+    // No Death Knights or Mage pets on the vanilla lines.
+    expect(hasPet('retail', 6)).toBe(true);
+    expect(hasPet('era', 6)).toBe(false);
+    expect(hasPet('era', 8)).toBe(false);
+    expect(hasPet('era', 3)).toBe(true);
+    // Unknown class shows the controls rather than hiding them.
+    expect(hasPet('retail', 0)).toBe(true);
   });
 });

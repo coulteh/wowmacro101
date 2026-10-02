@@ -48,6 +48,43 @@ export const CLASSES_BY_FLAVOUR: Record<FlavourId, number[]> = {
   era: VANILLA_CLASSES,
 };
 
+/**
+ * Specialisations in `[spec:N]` order, read from ChrSpecialization (ClassID +
+ * OrderIndex) on build 12.1.0.69933. The "Initial" starter spec at OrderIndex 4 is
+ * excluded — it is not something you can be.
+ */
+export const SPECS_BY_CLASS: Record<number, string[]> = {
+  1: ['Arms', 'Fury', 'Protection'],
+  2: ['Holy', 'Protection', 'Retribution'],
+  3: ['Beast Mastery', 'Marksmanship', 'Survival'],
+  4: ['Assassination', 'Outlaw', 'Subtlety'],
+  5: ['Discipline', 'Holy', 'Shadow'],
+  6: ['Blood', 'Frost', 'Unholy'],
+  7: ['Elemental', 'Enhancement', 'Restoration'],
+  8: ['Arcane', 'Fire', 'Frost'],
+  9: ['Affliction', 'Demonology', 'Destruction'],
+  10: ['Brewmaster', 'Mistweaver', 'Windwalker'],
+  11: ['Balance', 'Feral', 'Guardian', 'Restoration'],
+  12: ['Havoc', 'Vengeance', 'Devourer'],
+  13: ['Devastation', 'Preservation', 'Augmentation'],
+};
+
+/**
+ * Classes with a pet you can actually command with /petattack and test with [pet].
+ * Temporary, uncontrollable summons — Shadowfiend, treants, totems — do not count.
+ */
+const PET_CLASSES = new Set([3, 6, 8, 9]);        // Hunter, Death Knight, Mage, Warlock
+const VANILLA_PET_CLASSES = new Set([3, 9]);      // no Death Knights, and no Mage pet yet
+
+export function hasPet(flavour: FlavourId, classId: number): boolean {
+  if (classId === ANY_CLASS) return true;          // unknown: show the controls
+  return flavour === 'retail' ? PET_CLASSES.has(classId) : VANILLA_PET_CLASSES.has(classId);
+}
+
+export function specsFor(classId: number): string[] {
+  return SPECS_BY_CLASS[classId] ?? [];
+}
+
 const BY_ID = new Map(WOW_CLASSES.map((c) => [c.id, c]));
 
 export function className(id: number): string | null {

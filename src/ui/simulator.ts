@@ -1,6 +1,6 @@
 // The "situation" panel: the macro equivalent of regex101's test string.
 
-import { ANY_CLASS, classesFor, wowClass } from '../data/classes';
+import { ANY_CLASS, classesFor, hasPet, specsFor, wowClass } from '../data/classes';
 import { iconUrl } from '../data/spells';
 import type { FlavourId } from '../flavours';
 import type { SimState } from '../sim/state';
@@ -16,6 +16,8 @@ interface Section {
   title: string;
   hint?: string;
   controls: Control[];
+  /** Hidden when this returns false for the current class. */
+  showFor?: (flavour: FlavourId, classId: number) => boolean;
 }
 
 const REACTIONS: [string, string][] = [
@@ -24,6 +26,26 @@ const REACTIONS: [string, string][] = [
   ['hostile', 'hostile'],
   ['neutral', 'neutral'],
 ];
+
+/**
+ * `[spec:N]` indexes the class's specialisations in order, so with a class chosen we
+ * can name them instead of asking for a number nobody remembers.
+ */
+function renderSpecControl(classId: number, current: number): string {
+  const specs = specsFor(classId);
+  if (!specs.length) {
+    // No class chosen, so there is nothing to name.
+    return '<label class="sim-field"><span>spec</span>'
+      + `<input type="number" min="1" max="4" value="${current}" data-path="spec" data-type="number">`
+      + '</label>';
+  }
+  const options = specs
+    .map((name, i) => `<option value="${i + 1}"${i + 1 === current ? ' selected' : ''}>`
+      + `${escapeHtml(`${i + 1} — ${name}`)}</option>`)
+    .join('');
+  return '<label class="sim-field"><span>spec</span>'
+    + `<select data-path="spec" data-type="number">${options}</select></label>`;
+}
 
 function unitSection(slot: 'target' | 'focus' | 'mouseover', title: string): Section {
   return {
@@ -38,7 +60,7 @@ function unitSection(slot: 'target' | 'focus' | 'mouseover', title: string): Sec
 
 export const SECTIONS: Section[] = [
   {
-    title: 'How you pressed it',
+    title: 'Your keypress',
     controls: [
       { kind: 'check', label: 'Shift', path: 'modifiers.shift' },
       { kind: 'check', label: 'Ctrl', path: 'modifiers.ctrl' },
@@ -50,7 +72,7 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'You',
+    title: 'You are',
     controls: [
       { kind: 'check', label: 'in combat', path: 'combat' },
       { kind: 'check', label: 'mounted', path: 'mounted' },
@@ -63,7 +85,6 @@ export const SECTIONS: Section[] = [
       { kind: 'check', label: 'resting', path: 'resting' },
       { kind: 'check', label: 'channelling', path: 'channeling' },
       { kind: 'number', label: 'form / stance', path: 'form', min: 0, max: 10 },
-      { kind: 'number', label: 'spec', path: 'spec', min: 1, max: 4 },
       { kind: 'number', label: 'action bar', path: 'actionbar', min: 1, max: 6 },
       {
         kind: 'select', label: 'group', path: 'group', type: 'string',
@@ -76,6 +97,9 @@ export const SECTIONS: Section[] = [
   unitSection('mouseover', 'Under your cursor'),
   {
     title: 'Your pet',
+    // Hidden for classes with no commandable pet -- [pet] and /petattack are
+    // meaningless there, so the controls would only be noise.
+    showFor: hasPet,
     controls: [
       { kind: 'check', label: 'pet is out', path: 'hasPet' },
       { kind: 'text', label: 'family', path: 'petName', placeholder: 'e.g. Voidwalker' },
@@ -138,11 +162,25 @@ export function renderCharacter(flavour: FlavourId, classId: number): string {
 }
 
 export function renderSimulator(state: SimState, flavour: FlavourId, classId: number): string {
-  return renderCharacter(flavour, classId) + SECTIONS.map((section) => {
-    const body = section.controls.map((c) => renderControl(state, c)).join('');
-    return `<fieldset class="sim-section"><legend>${escapeHtml(section.title)}</legend>`
-      + `<div class="sim-controls">${body}</div></fieldset>`;
-  }).join('');
+  const sections = SECTIONS
+    .filter((section) => !section.showFor || section.showFor(flavour, classId))
+    .map((section) => {
+      let body = section.controls.map((c) => renderControl(state, c)).join('');
+      // The spec control is built from the class rather than the control list, and
+      // [spec:N] does not exist at all on versions without specialisations.
+      if (section.title === 'You are' && specAvailable(flavour)) {
+        body += renderSpecControl(classId, state.spec);
+      }
+      return `<fieldset class="sim-section"><legend>${escapeHtml(section.title)}</legend>`
+        + `<div class="sim-controls">${body}</div></fieldset>`;
+    })
+    .join('');
+  return renderCharacter(flavour, classId) + sections;
+}
+
+/** Classic Era has no specialisations, so asking for one is nonsense there. */
+function specAvailable(flavour: FlavourId): boolean {
+  return flavour !== 'era';
 }
 
 function renderControl(state: SimState, control: Control): string {

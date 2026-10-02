@@ -1,6 +1,6 @@
 import './styles.css';
 
-import { ANY_CLASS, isClassAvailable } from './data/classes';
+import { ANY_CLASS, isClassAvailable, specsFor } from './data/classes';
 import { EXAMPLES } from './data/examples';
 import { loadSpellIndex, type SpellIndex } from './data/spells';
 import { describeAction, explainMacro } from './explain/explain';
@@ -14,7 +14,7 @@ import { hideSpellTooltip, initSpellTooltip } from './ui/tooltip';
 import { escapeHtml, highlightHtml, nodeAtOffset } from './ui/highlight';
 import { readPermalink, writePermalink } from './ui/permalink';
 import { REF_TABS, renderReference, type RefTab } from './ui/reference';
-import { applyControlChange, renderCharacter, renderSimulator } from './ui/simulator';
+import { applyControlChange, renderSimulator } from './ui/simulator';
 
 const STORAGE_KEY = 'wowmacro101:v1';
 
@@ -137,15 +137,24 @@ function renderSimPanel(): void {
 }
 
 /**
- * Re-renders just the class picker, so its colour and icon follow the selection.
- * update() deliberately does not touch the Situation panel -- re-rendering it on every
- * keystroke would fight the controls -- so this has to be explicit.
+ * Re-renders the Situation panel after a class change. The class drives more than its
+ * own swatch: it names the specialisations and decides whether the pet section is shown
+ * at all. update() deliberately leaves the panel alone -- re-rendering on every
+ * keystroke would fight the controls -- so this is explicit.
  */
+/**
+ * Druid has four specialisations, everyone else three. Leaving spec on 4 after
+ * switching away from Druid would show "1 — Arms" while the simulator still evaluated
+ * [spec:4].
+ */
+function clampSpec(): void {
+  const count = specsFor(state.classId).length;
+  if (count && state.sim.spec > count) state.sim.spec = count;
+}
+
 function renderCharacterPanel(): void {
-  const current = document.getElementById('character');
-  if (!current) return;
-  const hadFocus = current.contains(document.activeElement);
-  current.outerHTML = renderCharacter(state.flavour, state.classId);
+  const hadFocus = document.activeElement?.getAttribute('data-path') === 'class';
+  renderSimPanel();
   if (hadFocus) document.querySelector<HTMLSelectElement>('[data-path="class"]')?.focus();
 }
 
@@ -283,6 +292,7 @@ function bind(): void {
     // A class the new flavour does not have would leave the dropdown showing a value
     // it no longer offers.
     if (!isClassAvailable(state.flavour, state.classId)) state.classId = ANY_CLASS;
+    clampSpec();
     renderFlavourNote();
     renderRef();
     renderSimPanel();
@@ -297,6 +307,7 @@ function bind(): void {
     // Match the example's class, so the app does not warn about its own examples.
     const wanted = example.classId ?? ANY_CLASS;
     state.classId = isClassAvailable(state.flavour, wanted) ? wanted : ANY_CLASS;
+    clampSpec();
     renderSimPanel();
     setMacro(example.macro);
     examplesSelect.value = '-1';
@@ -373,6 +384,7 @@ function onSimChange(event: Event): void {
   // Class is app state, not simulated state -- see renderCharacter.
   if (path === 'class') {
     state.classId = Number(target.value) || ANY_CLASS;
+    clampSpec();
     renderCharacterPanel();
     update();
     return;
