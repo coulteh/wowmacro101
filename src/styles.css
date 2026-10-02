@@ -523,3 +523,12 @@ ul.expl ul.expl { margin-left: 14px; border-left: 1px solid var(--border); }
 
 /* Classic spell ranks: /cast Fireball(Rank 3) */
 .t-rank { color: var(--tok-meta); }
+
+/* The popover is interactive — it must accept the pointer, not just show facts. */
+.spell-tip-link:hover,
+.spell-tip-link:focus-visible { text-decoration: underline; }
+.spell-tip-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
