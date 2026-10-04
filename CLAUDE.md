@@ -2,6 +2,37 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+**`git fetch origin` before you reason about any of this.** A stale local `main` makes every
+question about a branch's base unanswerable, and the wrong answer looks perfectly convincing:
+a squash merge means the work can already be on `main` under a commit you have never seen,
+while the branch it came from still sits there locally looking unmerged. Confirm where you
+actually are with `git status` and `git branch --show-current` before you create a branch,
+commit, or reason about what depends on what.
+
+**Never commit directly to `main`.** Every change starts on its own branch, however small.
+`main` is what GitHub Pages deploys from, so a commit landing there is a release. Branch off
+`origin/main` rather than local `main` unless explicitly told otherwise, and never commit to a
+feature branch that was not created for the task in hand.
+
+A branch is merged by **squashing**, and it is **rebased onto `main` first** so the squashed
+commit sits on top of current `main` rather than carrying a merge. **Delete the branch once
+it is merged** — a merged branch left behind is the thing people accidentally branch from.
+
+Then check the base, because branching from whatever happened to be checked out is the easy
+mistake. A branch started on top of another branch inherits its commits, and `git rebase
+main` will *not* remove them — `main` is already an ancestor, so the rebase is a no-op and
+says "up to date". Moving just your own commits takes
+`git rebase --onto main <parent> <branch>`. When the parent is already squash-merged that
+replays cleanly; `git branch -D` is then the only way to drop the local parent, since
+`-d` does not recognise a squash merge.
+
+### Releases
+
+- Never delete or force-move a published git tag. If a release needs changing, propose the
+  exact commands and let the user run them.
+
 ## Commands
 
 ```sh
@@ -33,6 +64,13 @@ npm run data:spells -- --build 12.1.0.69933       # pin a build if the builds AP
 ```
 
 Downloads cache in `.cache/` (gitignored), so re-runs are cheap.
+
+## Verification
+
+- Before declaring a change done: run the full test suite (`npm test`) and `npm run build`, which
+  is the typecheck CI relies on. There is no linter — `.editorconfig` is authoritative, see
+  **Conventions**.
+- Re-read any YAML/workflow file you edited to confirm its shell syntax is still valid.
 
 ## Architecture
 
@@ -252,28 +290,6 @@ over the entire dictionary enforces this: a positive gloss may not survive into 
 negative, with an explicit allowlist for parentheticals that gloss a term rather than
 assert a truth.
 
-## Branching
-
-**Never commit directly to `main`.** Every change starts on its own branch, however small.
-`main` is what GitHub Pages deploys from, so a commit landing there is a release.
-
-A branch is merged by **squashing**, and it is **rebased onto `main` first** so the squashed
-commit sits on top of current `main` rather than carrying a merge. **Delete the branch once
-it is merged** — a merged branch left behind is the thing people accidentally branch from.
-
-**`git fetch` before you reason about any of this.** A stale local `main` makes every
-question about a branch's base unanswerable, and the wrong answer looks perfectly
-convincing: a squash merge means the work can already be on `main` under a commit you have
-never seen, while the branch it came from still sits there locally looking unmerged.
-
-Then check the base, because branching from whatever happened to be checked out is the easy
-mistake. A branch started on top of another branch inherits its commits, and `git rebase
-main` will *not* remove them — `main` is already an ancestor, so the rebase is a no-op and
-says "up to date". Moving just your own commits takes
-`git rebase --onto main <parent> <branch>`. When the parent is already squash-merged that
-replays cleanly; `git branch -D` is then the only way to drop the local parent, since
-`-d` does not recognise a squash merge.
-
 ## Deployment
 
 `.github/workflows/deploy.yml` tests and builds on every push and pull request, and
@@ -291,3 +307,8 @@ npm run build && python3 -m http.server 5199   # then http://127.0.0.1:5199/dist
 `dist/` is gitignored — the artifact is built in CI, never committed. Pages must be set
 to the **GitHub Actions** source (`build_type: workflow`); in branch mode it publishes the
 repository root, which serves the unbuilt `index.html` and its `./src/main.ts` script tag.
+
+## Planning
+
+- For any task that touches more than one file or creates new data/schema files, present a short
+  plan (files to add/change, scope boundaries) and wait for approval before writing code.
