@@ -5,9 +5,10 @@ import spellData from '../src/data/spells.retail.json';
 import eraData from '../src/data/spells.era.json';
 import foreverData from '../src/data/spells.forever.json';
 import {
-  belongsToClass, createSpellIndex, iconUrl, wowheadUrl, ICON_BASE, type SpellData,
+  belongsToClass, createSpellIndex, iconUrl, wowheadUrl, ICON_BASE,
+  type SpellData, type SpellIndex,
 } from '../src/data/spells';
-import { FLAVOUR_IDS } from '../src/flavours';
+import { FLAVOUR_IDS, type FlavourId } from '../src/flavours';
 import { EXAMPLES } from '../src/data/examples';
 import { ANY_CLASS, classesFor, WOW_CLASSES } from '../src/data/classes';
 import { parseMacro } from '../src/parser/parser';
@@ -22,6 +23,18 @@ const ALL = [
   ['era', eraData as unknown as SpellData, era],
   ['forever', foreverData as unknown as SpellData, forever],
 ] as const;
+
+const INDEX_BY_FLAVOUR: Record<FlavourId, SpellIndex> = { retail: index, era, forever };
+
+/**
+ * Every (example, flavour) pair the app will actually offer.
+ *
+ * Parsing an example only against 'retail' is how [flyable] on Classic Era and a TBC
+ * spell on a vanilla dataset went unnoticed -- the two cases that prompted the flavour
+ * allowlist in examples.json.
+ */
+const EXAMPLE_CASES = EXAMPLES.flatMap((example) =>
+  (example.flavours ?? FLAVOUR_IDS).map((flavour) => ({ example, flavour })));
 
 describe('bundled spell dataset', () => {
   it('is populated and labelled with its build', () => {
@@ -74,11 +87,14 @@ describe('bundled spell dataset', () => {
   it('recognises every spell used in the bundled examples', () => {
     // Otherwise the app contradicts its own examples the moment you load one.
     const complaints: string[] = [];
-    for (const example of EXAMPLES) {
-      const ast = parseMacro(example.macro, 'retail', { spells: index });
+    for (const { example, flavour } of EXAMPLE_CASES) {
+      const ast = parseMacro(example.macro, flavour, {
+        spells: INDEX_BY_FLAVOUR[flavour],
+        classId: example.classId ?? ANY_CLASS,
+      });
       for (const issue of ast.issues) {
         if (/not in the bundled spell list/.test(issue.message)) {
-          complaints.push(`${example.title}: ${issue.message}`);
+          complaints.push(`${example.title} on ${flavour}: ${issue.message}`);
         }
       }
     }
@@ -95,10 +111,15 @@ describe('bundled spell dataset', () => {
   });
 
   it('leaves the examples clean of errors and warnings too', () => {
-    for (const example of EXAMPLES) {
-      const ast = parseMacro(example.macro, 'retail', { spells: index });
+    // Passing classId is the point: it is what exercises the class-ownership check
+    // against the examples, which selecting the example's class makes a real promise.
+    for (const { example, flavour } of EXAMPLE_CASES) {
+      const ast = parseMacro(example.macro, flavour, {
+        spells: INDEX_BY_FLAVOUR[flavour],
+        classId: example.classId ?? ANY_CLASS,
+      });
       const bad = ast.issues.filter((i) => i.severity !== 'info');
-      expect(bad.map((i) => i.message), `${example.title} should be clean`).toEqual([]);
+      expect(bad.map((i) => i.message), `${example.title} on ${flavour} should be clean`).toEqual([]);
     }
   });
 

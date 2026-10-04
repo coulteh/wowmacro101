@@ -51,7 +51,8 @@ text ──> parser/ ──> AST ──┬──> explain/ ──> rows of {chip
 - **`src/explain/`** — `MacroAst` -> nested `{ chip, text, children }` rows. No DOM.
 - **`src/sim/`** — `(MacroAst, SimState)` -> verdicts. No DOM.
 - **`src/ui/`** — renders the above; `src/main.ts` owns app state and wiring.
-- **`src/data/`** — dictionaries plus generated spell JSON.
+- **`src/data/`** — dictionaries, generated spell JSON, and `examples.json`, which is
+  hand-authored content rather than generated data.
 
 ### Five things that will bite you if you don't know them
 
@@ -102,6 +103,12 @@ Counter-intuitively, **Forever shares Midnight's grammar but follows Classic Era
 matters**: spell ranks work and there are no specialisations. The flavour id `retail` is
 deliberately not renamed to `midnight` — permalinks, `localStorage` and
 `spells.retail.json` all depend on the string.
+
+`examples.json` follows the same convention with an optional `flavours` allowlist, where
+**absent means every flavour** — most examples are flavour-neutral, so only the ones that
+are not carry the key. `test/spells.test.ts` parses each example against every flavour it
+claims, with its class selected; parsing them against `retail` alone is how `[flyable]`
+and a TBC spell sat in two Classic-facing examples unnoticed.
 
 **5. Where the data cannot be trusted, it is hardcoded — with the reason.** Class lists,
 spec names, pet-capable classes and shapeshift form orderings live in

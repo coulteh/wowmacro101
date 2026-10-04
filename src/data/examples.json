@@ -1,0 +1,156 @@
+[
+  {
+    "title": "Mouseover healing",
+    "blurb": "Heal whoever you point at, fall back to your target, then to yourself.",
+    "class": "Priest",
+    "macro": [
+      "#showtooltip",
+      "/cast [@mouseover,help,nodead][help,nodead][@player] Flash Heal"
+    ]
+  },
+  {
+    "title": "Shift to focus",
+    "blurb": "One interrupt button: your target normally, your focus with Shift.",
+    "class": "Mage",
+    "default": true,
+    "macro": [
+      "#showtooltip",
+      "/cast [mod:shift,@focus][] Counterspell"
+    ]
+  },
+  {
+    "title": "Modifier multi-spell",
+    "blurb": "Three abilities on one key, chosen by which modifier you hold.",
+    "class": "Rogue",
+    "macro": [
+      "#showtooltip",
+      "/cast [mod:alt] Kidney Shot; [mod:shift] Eviscerate; Sinister Strike"
+    ]
+  },
+  {
+    "title": "One-button travel",
+    "blurb": "Picks the right druid form for where you are and what you are doing.",
+    "class": "Druid",
+    "flavours": ["retail"],
+    "macro": [
+      "#showtooltip",
+      "/cast [swimming] Aquatic Form; [flyable,nocombat] Flight Form; [combat] Cat Form; Travel Form"
+    ]
+  },
+  {
+    "title": "Trinkets and cooldowns",
+    "blurb": "Fire both trinkets and a cooldown together. Items do not share the spell GCD.",
+    "class": "Paladin",
+    "macro": [
+      "#showtooltip Avenging Wrath",
+      "/use 13",
+      "/use 14",
+      "/cast Avenging Wrath"
+    ]
+  },
+  {
+    "title": "Cast sequence",
+    "blurb": "Steps through a rotation, resetting when you leave combat or pause.",
+    "class": "Hunter",
+    "flavours": ["retail"],
+    "macro": [
+      "#showtooltip",
+      "/castsequence reset=combat/5 Steady Shot, Arcane Shot"
+    ]
+  },
+  {
+    "title": "Guard clause",
+    "blurb": "Bail out early if there is nothing to attack, so the rest never runs.",
+    "class": "Warrior",
+    "macro": [
+      "/stopmacro [noexists]",
+      "/startattack",
+      "/cast [harm,nodead] Mortal Strike"
+    ]
+  },
+  {
+    "title": "Pet and player together",
+    "blurb": "Sends the pet in and casts, both pointed at your current target.",
+    "class": "Warlock",
+    "macro": [
+      "#showtooltip",
+      "/petattack [@target,harm]",
+      "/cast [@target,harm] Shadow Bolt"
+    ]
+  },
+  {
+    "title": "Stop casting and swap",
+    "blurb": "Interrupt your own cast to get an instant out immediately.",
+    "class": "Mage",
+    "macro": [
+      "#showtooltip Counterspell",
+      "/stopcasting",
+      "/cast Counterspell"
+    ]
+  },
+  {
+    "title": "Shoot what you've got",
+    "blurb": "You know all four shots; [equipped] picks the one matching your ranged slot.",
+    "class": "Warrior",
+    "flavours": ["forever", "era"],
+    "macro": [
+      "#showtooltip",
+      "/cast [equipped:Bows] Shoot Bow",
+      "/cast [equipped:Guns] Shoot Gun",
+      "/cast [equipped:Crossbows] Shoot Crossbow",
+      "/cast [equipped:Thrown] Throw"
+    ]
+  },
+  {
+    "title": "Rank 1 for the slow",
+    "blurb": "Downranking: the slow is the point, so do not pay for the damage.",
+    "class": "Mage",
+    "flavours": ["forever", "era"],
+    "macro": [
+      "#showtooltip Frostbolt(Rank 1)",
+      "/cast [harm,nodead] Frostbolt(Rank 1)"
+    ]
+  },
+  {
+    "title": "Stance dance",
+    "blurb": "Hop to Battle Stance if you are not in it, then Overpower once you are.",
+    "class": "Warrior",
+    "flavours": ["forever", "era"],
+    "macro": [
+      "#showtooltip Overpower",
+      "/cast [nostance:1] Battle Stance",
+      "/cast [stance:1] Overpower"
+    ]
+  },
+  {
+    "title": "Wand it down",
+    "blurb": "Out of mana: fall back on your wand. We cannot see your bags, so this might run.",
+    "class": "Priest",
+    "flavours": ["forever", "era"],
+    "macro": [
+      "#showtooltip",
+      "/cast [equipped:Wands] Shoot"
+    ]
+  },
+  {
+    "title": "Find a target first",
+    "blurb": "Grabs the nearest enemy if you have none, then opens up on it.",
+    "class": "Rogue",
+    "macro": [
+      "#showtooltip Sinister Strike",
+      "/targetenemy [noexists][dead]",
+      "/startattack",
+      "/cast [harm,nodead] Sinister Strike"
+    ]
+  },
+  {
+    "title": "Hold Alt to cancel",
+    "blurb": "Ice Block normally; hold Alt to break out of it early.",
+    "class": "Mage",
+    "macro": [
+      "#showtooltip Ice Block",
+      "/cancelaura [mod:alt] Ice Block",
+      "/cast [nomod:alt] Ice Block"
+    ]
+  }
+]
