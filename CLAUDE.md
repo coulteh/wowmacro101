@@ -252,6 +252,28 @@ over the entire dictionary enforces this: a positive gloss may not survive into 
 negative, with an explicit allowlist for parentheticals that gloss a term rather than
 assert a truth.
 
+## Branching
+
+**Never commit directly to `main`.** Every change starts on its own branch, however small.
+`main` is what GitHub Pages deploys from, so a commit landing there is a release.
+
+A branch is merged by **squashing**, and it is **rebased onto `main` first** so the squashed
+commit sits on top of current `main` rather than carrying a merge. **Delete the branch once
+it is merged** — a merged branch left behind is the thing people accidentally branch from.
+
+**`git fetch` before you reason about any of this.** A stale local `main` makes every
+question about a branch's base unanswerable, and the wrong answer looks perfectly
+convincing: a squash merge means the work can already be on `main` under a commit you have
+never seen, while the branch it came from still sits there locally looking unmerged.
+
+Then check the base, because branching from whatever happened to be checked out is the easy
+mistake. A branch started on top of another branch inherits its commits, and `git rebase
+main` will *not* remove them — `main` is already an ancestor, so the rebase is a no-op and
+says "up to date". Moving just your own commits takes
+`git rebase --onto main <parent> <branch>`. When the parent is already squash-merged that
+replays cleanly; `git branch -D` is then the only way to drop the local parent, since
+`-d` does not recognise a squash merge.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` tests and builds on every push and pull request, and
