@@ -639,6 +639,22 @@ function validateCondition(ctx: Ctx, line: Line, cond: Condition): void {
       }
     }
   }
+  // The gentler counterpart to strictValues, for a list that cannot be exhaustive. Info,
+  // never warning: [equipped:X] also takes inventory slot names that exist only as Lua
+  // globals, so a value we do not know may still be a working macro. Same tolerance the
+  // spell dataset gets.
+  if (def.softValues) {
+    const allowed = def.softValues(ctx.flavour);
+    const known = new Set(allowed.map((v) => v.toLowerCase()));
+    for (const v of cond.values) {
+      if (known.has(v.text.toLowerCase())) continue;
+      const hint = suggest(v.text, allowed);
+      const where = FLAVOURS[ctx.flavour].shortLabel;
+      ctx.issue('info', `"${v.text}" is not a value we recognise for [${def.name}] on ${where}.`, v, line.number, {
+        ...(hint ? { suggestion: hint } : {}), nodeId: cond.id,
+      });
+    }
+  }
   if (availabilityOf(def, ctx.flavour) !== 'yes') noteFlavour(ctx, def, span, line);
 }
 

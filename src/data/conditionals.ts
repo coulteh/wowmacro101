@@ -5,6 +5,7 @@
 // Keeping those together is what stops the explainer and the simulator drifting apart.
 
 import { formName, specsFor } from './classes';
+import { equippedValues } from './items';
 import type { ConditionalDef, EvalContext, Truth } from './types';
 
 const no = (n: boolean) => (n ? 'not ' : '');
@@ -284,10 +285,15 @@ export const CONDITIONALS: ConditionalDef[] = [
   // --- Equipment -----------------------------------------------------------
   {
     name: 'equipped', aliases: ['worn'], category: 'Equipment', value: 'required',
-    values: ['Shields', 'Daggers', 'Two-Handed Swords', 'One-Handed Maces', 'Staves', 'Bows', 'Guns', 'Wands', 'Fishing Poles', 'Thrown'],
+    // A short list for the Reference panel's insert chips, not the authority -- items.ts
+    // is. 'Fishing Poles' used to be here and is Midnight-only; the Classic lines have
+    // the singular, so it is a poor example either way.
+    values: ['Shields', 'Daggers', 'Two-Handed Swords', 'One-Handed Maces', 'Staves', 'Bows', 'Guns', 'Crossbows', 'Wands', 'Thrown', 'Two-Hand'],
     short: 'An item type is equipped',
     desc: (v, n) => `you ${n ? 'do not have' : 'have'} ${or(v)} equipped`,
-    note: 'Matches inventory slot names, item types or subtypes — e.g. [equipped:Shields].',
+    note: 'Matches inventory slot names, item types or subtypes — e.g. [equipped:Shields]. '
+      + 'Singular and plural both work: [equipped:Bow] and [equipped:Bows] are the same test.',
+    softValues: equippedValues,
     test: () => 'unknown',
   },
 
@@ -390,7 +396,10 @@ export function suggest(name: string, candidates: string[]): string | null {
   let best: string | null = null;
   let bestD = Infinity;
   for (const c of candidates) {
-    const d = editDistance(target, c);
+    // Compare case-insensitively but suggest the candidate's own casing. Every other
+    // candidate list here is lowercase already; item types are Capitalised, and
+    // measuring 'shiled' against 'Shields' scored the capital as a substitution.
+    const d = editDistance(target, c.toLowerCase());
     if (d < bestD) { bestD = d; best = c; }
   }
   const limit = target.length <= 4 ? 1 : 2;

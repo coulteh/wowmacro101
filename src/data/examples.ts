@@ -1,9 +1,22 @@
-import { WOW_CLASSES } from './classes';
+// Bundled example macros.
+//
+// The content lives in examples.json so that adding or fixing an example is a data edit
+// rather than a code change. This module is only the adapter: it joins the macro lines,
+// resolves the class name to an id and exposes the per-flavour filter.
 
-/** By name so the mapping cannot drift from the class list. */
-const CLASS: Record<string, number> = Object.fromEntries(
-  WOW_CLASSES.map((c) => [c.name, c.id]),
-);
+import raw from './examples.json';
+import { WOW_CLASSES } from './classes';
+import type { FlavourId } from '../flavours';
+
+/** The on-disk shape. `macro` is one entry per line; `class` is a name, not an id. */
+interface RawExample {
+  title: string;
+  blurb: string;
+  macro: string[];
+  class?: string;
+  flavours?: string[];
+  default?: boolean;
+}
 
 export interface Example {
   title: string;
@@ -14,61 +27,38 @@ export interface Example {
    * warn about its own examples using another class's abilities.
    */
   classId?: number;
+  /**
+   * Flavours this example is offered on. Absent means all of them -- most examples are
+   * flavour-neutral, so only the ones that are not carry the key.
+   */
+  flavours?: FlavourId[];
 }
 
-export const EXAMPLES: Example[] = [
-  {
-    title: 'Mouseover healing',
-    blurb: 'Heal whoever you point at, fall back to your target, then to yourself.',
-    macro: '#showtooltip\n/cast [@mouseover,help,nodead][help,nodead][@player] Flash Heal',
-    classId: CLASS.Priest,
-  },
-  {
-    title: 'Shift to focus',
-    blurb: 'One interrupt button: your target normally, your focus with Shift.',
-    macro: '#showtooltip\n/cast [mod:shift,@focus][] Counterspell',
-    classId: CLASS.Mage,
-  },
-  {
-    title: 'Modifier multi-spell',
-    blurb: 'Three abilities on one key, chosen by which modifier you hold.',
-    macro: '#showtooltip\n/cast [mod:alt] Kidney Shot; [mod:shift] Eviscerate; Sinister Strike',
-    classId: CLASS.Rogue,
-  },
-  {
-    title: 'One-button travel',
-    blurb: 'Picks the right druid form for where you are and what you are doing.',
-    macro: '#showtooltip\n/cast [swimming] Aquatic Form; [flyable,nocombat] Flight Form; [combat] Cat Form; Travel Form',
-    classId: CLASS.Druid,
-  },
-  {
-    title: 'Trinkets and cooldowns',
-    blurb: 'Fire both trinkets and a cooldown together. Items do not share the spell GCD.',
-    macro: '#showtooltip Avenging Wrath\n/use 13\n/use 14\n/cast Avenging Wrath',
-    classId: CLASS.Paladin,
-  },
-  {
-    title: 'Cast sequence',
-    blurb: 'Steps through a rotation, resetting when you leave combat or pause.',
-    macro: '#showtooltip\n/castsequence reset=combat/5 Steady Shot, Arcane Shot',
-    classId: CLASS.Hunter,
-  },
-  {
-    title: 'Guard clause',
-    blurb: 'Bail out early if there is nothing to attack, so the rest never runs.',
-    macro: '/stopmacro [noexists]\n/startattack\n/cast [harm,nodead] Mortal Strike',
-    classId: CLASS.Warrior,
-  },
-  {
-    title: 'Pet and player together',
-    blurb: 'Sends the pet in and casts, both pointed at your current target.',
-    macro: '#showtooltip\n/petattack [@target,harm]\n/cast [@target,harm] Shadow Bolt',
-    classId: CLASS.Warlock,
-  },
-  {
-    title: 'Stop casting and swap',
-    blurb: 'Interrupt your own cast to get an instant out immediately.',
-    macro: '#showtooltip Counterspell\n/stopcasting\n/cast Counterspell',
-    classId: CLASS.Mage,
-  },
-];
+/** By name so the mapping cannot drift from the class list. */
+const CLASS_IDS: Record<string, number> = Object.fromEntries(
+  WOW_CLASSES.map((c) => [c.name, c.id]),
+);
+
+/**
+ * An unknown class name resolves to undefined -- no class filtering -- rather than
+ * throwing. A typo in the content must not white-screen the app; the test suite is what
+ * makes it loud instead.
+ */
+export const EXAMPLES: Example[] = (raw as RawExample[]).map((ex) => ({
+  title: ex.title,
+  blurb: ex.blurb,
+  macro: ex.macro.join('\n'),
+  ...(ex.class && CLASS_IDS[ex.class] ? { classId: CLASS_IDS[ex.class] } : {}),
+  ...(ex.flavours ? { flavours: ex.flavours as FlavourId[] } : {}),
+}));
+
+/** The macro the editor opens with, by flag rather than by index. */
+export const DEFAULT_EXAMPLE: Example = (() => {
+  const index = (raw as RawExample[]).findIndex((ex) => ex.default);
+  return EXAMPLES[index === -1 ? 0 : index];
+})();
+
+/** The examples worth offering on this flavour. */
+export function examplesFor(flavour: FlavourId): Example[] {
+  return EXAMPLES.filter((ex) => !ex.flavours || ex.flavours.includes(flavour));
+}

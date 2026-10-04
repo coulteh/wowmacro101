@@ -1,7 +1,7 @@
 import './styles.css';
 
 import { ANY_CLASS, formSupport, isClassAvailable, specsFor } from './data/classes';
-import { EXAMPLES } from './data/examples';
+import { DEFAULT_EXAMPLE, examplesFor, type Example } from './data/examples';
 import { loadSpellIndex, type SpellIndex } from './data/spells';
 import { describeAction, explainMacro } from './explain/explain';
 import { DEFAULT_FLAVOUR, FLAVOURS, FLAVOUR_IDS, type FlavourId } from './flavours';
@@ -46,7 +46,7 @@ interface AppState {
 }
 
 const state: AppState = {
-  macro: EXAMPLES[1].macro,
+  macro: DEFAULT_EXAMPLE.macro,
   flavour: DEFAULT_FLAVOUR,
   classId: ANY_CLASS,
   sim: defaultSimState(),
@@ -54,6 +54,8 @@ const state: AppState = {
   query: '',
 };
 
+/** The examples currently in the dropdown; option values index into this, not EXAMPLES. */
+let shownExamples: Example[] = [];
 let ast: MacroAst = parseMacro('', DEFAULT_FLAVOUR);
 let caretNode: string | null = null;
 /** Null until the dataset loads, and for flavours we have no dataset for. */
@@ -303,14 +305,15 @@ function bind(): void {
     renderFlavourNote();
     renderRef();
     renderSimPanel();
+    populateExamples();
     update();
     void loadSpells();
   });
 
   examplesSelect.addEventListener('change', () => {
     const index = Number(examplesSelect.value);
-    if (Number.isNaN(index) || index < 0) return;
-    const example = EXAMPLES[index];
+    if (Number.isNaN(index) || index < 0 || !shownExamples[index]) return;
+    const example = shownExamples[index];
     // Match the example's class, so the app does not warn about its own examples.
     const wanted = example.classId ?? ANY_CLASS;
     state.classId = isClassAvailable(state.flavour, wanted) ? wanted : ANY_CLASS;
@@ -431,8 +434,14 @@ function populateSelects(): void {
     .join('');
   flavourSelect.value = state.flavour;
 
+  populateExamples();
+}
+
+/** Only the examples that work on the current flavour -- see examplesFor. */
+function populateExamples(): void {
+  shownExamples = examplesFor(state.flavour);
   examplesSelect.innerHTML = '<option value="-1">Load an example…</option>'
-    + EXAMPLES.map((ex, i) => `<option value="${i}" title="${escapeHtml(ex.blurb)}">`
+    + shownExamples.map((ex, i) => `<option value="${i}" title="${escapeHtml(ex.blurb)}">`
       + `${escapeHtml(ex.title)}</option>`).join('');
   examplesSelect.value = '-1';
 }

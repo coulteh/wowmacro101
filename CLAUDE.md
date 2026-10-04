@@ -51,7 +51,8 @@ text ──> parser/ ──> AST ──┬──> explain/ ──> rows of {chip
 - **`src/explain/`** — `MacroAst` -> nested `{ chip, text, children }` rows. No DOM.
 - **`src/sim/`** — `(MacroAst, SimState)` -> verdicts. No DOM.
 - **`src/ui/`** — renders the above; `src/main.ts` owns app state and wiring.
-- **`src/data/`** — dictionaries plus generated spell JSON.
+- **`src/data/`** — dictionaries, generated spell JSON, and `examples.json`, which is
+  hand-authored content rather than generated data.
 
 ### Five things that will bite you if you don't know them
 
@@ -79,6 +80,13 @@ The same principle governs severity: unrecognised spell names are **info**, flav
 mismatches are **warnings**, and only genuine syntax faults are **errors**. A spell
 missing from the dataset must never be an error — the data always lags a patch.
 
+A `ConditionalDef` has two levers for checking its values, and the difference is that
+rule, not a detail. `strictValues` warns, and is only for a closed enum (`[actionbar:N]`,
+`[mod:shift]`). `softValues(flavour)` reports at **info**, for a list we believe is
+mostly right but cannot promise is complete — `[equipped:X]` also takes inventory slot
+names that exist only as Lua globals, so a value we do not recognise may still be a
+working macro. Reach for `softValues` whenever the list could be incomplete.
+
 Unranked resolution is the one place we answer a question the data cannot: `/cast Fireball`
 with no rank casts *the highest rank you know*, and we do not model level, so
 `SpellIndex.lookup` falls back to the highest rank present. That is the right answer for a
@@ -96,6 +104,12 @@ matters**: spell ranks work and there are no specialisations. The flavour id `re
 deliberately not renamed to `midnight` — permalinks, `localStorage` and
 `spells.retail.json` all depend on the string.
 
+`examples.json` follows the same convention with an optional `flavours` allowlist, where
+**absent means every flavour** — most examples are flavour-neutral, so only the ones that
+are not carry the key. `test/spells.test.ts` parses each example against every flavour it
+claims, with its class selected; parsing them against `retail` alone is how `[flyable]`
+and a TBC spell sat in two Classic-facing examples unnoticed.
+
 **5. Where the data cannot be trusted, it is hardcoded — with the reason.** Class lists,
 spec names, pet-capable classes and shapeshift form orderings live in
 `src/data/classes.ts` as literals, each with a comment explaining why. Examples: Classic
@@ -103,6 +117,23 @@ builds carry a Death Knight bit in their `ClassMask` despite vanilla having no D
 Knights; `SpellShapeshift.StanceBarOrder` maps directly on Retail but is offset by one on
 the Classic lines. Retail Warrior stances are deliberately left *unnamed* because the
 data contradicts the well-known order.
+
+`src/data/items.ts` is the same story for the item types `[equipped:X]` can name, and the
+one place a *name* table proved as untrustworthy as an index. Only `ClassID` 2 (Weapon)
+and 4 (Armor) can be equipped, and `ItemSubClass` carries two addressable name columns —
+`DisplayName_lang` singular (`Bow`), `VerboseName_lang` plural or qualified (`Bows`,
+`One-Handed Swords`) — so both are accepted. Several subclasses exist in name only, so
+every value was corroborated against real rows in `Item.db2` and their names in
+`ItemSearchName`: Forever's "Warglaives" are two NPC display models, "Spears" are two test
+items, and the "Exotics" are a dead slot. The exclusions are listed with their reasons at
+the top of the file. An algorithmic filter was tried and was worse — gating on presence in
+`ItemSearchName` also removed Librams, Idols and Totems, which are real, because Era's
+export covers only 13k of its 25k items.
+
+Inventory slot names (`Ranged`, `Trinket`, `Two-Hand`) are the exception twice over: they
+are the client's Lua `INVTYPE_*` globals with **no DB2 to read them from**, so they are
+the one list here corroborated from a single source — which is exactly why an unrecognised
+`[equipped:]` value is info and never a warning.
 
 **If you cannot corroborate a mapping from two sources, leave it as a number.** A wrong
 index is worse than an unlabelled one.
@@ -220,6 +251,28 @@ Negated descriptions must negate the *whole* phrase, including any parenthetical
 over the entire dictionary enforces this: a positive gloss may not survive into the
 negative, with an explicit allowlist for parentheticals that gloss a term rather than
 assert a truth.
+
+## Branching
+
+**Never commit directly to `main`.** Every change starts on its own branch, however small.
+`main` is what GitHub Pages deploys from, so a commit landing there is a release.
+
+A branch is merged by **squashing**, and it is **rebased onto `main` first** so the squashed
+commit sits on top of current `main` rather than carrying a merge. **Delete the branch once
+it is merged** — a merged branch left behind is the thing people accidentally branch from.
+
+**`git fetch` before you reason about any of this.** A stale local `main` makes every
+question about a branch's base unanswerable, and the wrong answer looks perfectly
+convincing: a squash merge means the work can already be on `main` under a commit you have
+never seen, while the branch it came from still sits there locally looking unmerged.
+
+Then check the base, because branching from whatever happened to be checked out is the easy
+mistake. A branch started on top of another branch inherits its commits, and `git rebase
+main` will *not* remove them — `main` is already an ancestor, so the rebase is a no-op and
+says "up to date". Moving just your own commits takes
+`git rebase --onto main <parent> <branch>`. When the parent is already squash-merged that
+replays cleanly; `git branch -D` is then the only way to drop the local parent, since
+`-d` does not recognise a squash merge.
 
 ## Deployment
 
