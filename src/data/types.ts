@@ -26,6 +26,15 @@ export interface ConditionalDef {
   values?: string[];
   /** True when `values` is a closed enum, so unknown values are worth warning about. */
   strictValues?: boolean;
+  /**
+   * Known values for a list we cannot promise is complete, checked at *info* level.
+   *
+   * The counterpart to `strictValues`, which warns. Use this where the dictionary knows
+   * most of the answer but not all of it -- `[equipped:X]` accepts inventory slot names
+   * that exist only as Lua globals, so a value we do not recognise may still be perfectly
+   * good. Same rule as an unrecognised spell name: say something, but never accuse.
+   */
+  softValues?: (flavour: FlavourId) => string[];
   short: string;
   /**
    * Plain-English phrase. Negation is handled here so wording stays natural.

@@ -565,3 +565,54 @@ describe('flavour notes', () => {
     expect(FLAVOURS.retail.note).toBeUndefined();
   });
 });
+
+describe('[equipped] values', () => {
+  it('accepts a real item type, singular or plural', () => {
+    for (const value of ['Bows', 'Bow', 'Shields', 'Crossbows', 'One-Handed Swords']) {
+      const ast = parseMacro(`/cast [equipped:${value}] Shoot`, 'era');
+      expect(messages(ast), value).toEqual([]);
+    }
+  });
+
+  it('accepts an inventory slot name, including the two-hander test', () => {
+    for (const value of ['Ranged', 'Two-Hand', 'Trinket', 'Main Hand']) {
+      const ast = parseMacro(`/cast [equipped:${value}] Overpower`, 'era');
+      expect(messages(ast), value).toEqual([]);
+    }
+  });
+
+  it('flags a typo at info level, never as a warning or an error', () => {
+    // The list cannot be exhaustive -- slot names exist only as Lua globals -- so an
+    // unrecognised value must never accuse a working macro of being broken.
+    const ast = parseMacro('/cast [equipped:Shiled] Shoot', 'era');
+    expect(errors(ast)).toHaveLength(0);
+    expect(warnings(ast)).toHaveLength(0);
+    expect(infos(ast)).toHaveLength(1);
+    expect(infos(ast)[0].message).toContain('"Shiled" is not a value we recognise');
+    // Either spelling is a real value; the singular is simply the closer of the two.
+    expect(infos(ast)[0].suggestion).toBe('Shield');
+  });
+
+  it('is flavour-aware: Fishing Poles is the plural only Midnight has', () => {
+    expect(messages(parseMacro('/cast [equipped:Fishing Poles] Shoot', 'retail'))).toEqual([]);
+    const era = parseMacro('/cast [equipped:Fishing Poles] Shoot', 'era');
+    expect(infos(era)).toHaveLength(1);
+    expect(infos(era)[0].message).toContain('on Classic Era');
+    expect(messages(parseMacro('/cast [equipped:Fishing Pole] Shoot', 'era'))).toEqual([]);
+  });
+
+  it('does not accept the enchanting-scroll category for a two-hander', () => {
+    // 'Two-Handed Weapon' is ItemClass 8 (Item Enhancement), not an equippable type.
+    // Too far from 'Two-Hand' to suggest, so this only has to be noticed, not corrected.
+    const ast = parseMacro('/cast [equipped:Two-Handed Weapon] Overpower', 'era');
+    expect(infos(ast)).toHaveLength(1);
+    expect(infos(ast)[0].message).toContain('"Two-Handed Weapon" is not a value we recognise');
+  });
+
+  it('points at the offending value, not the whole condition', () => {
+    const source = '/cast [equipped:Shiled] Shoot';
+    const ast = parseMacro(source, 'era');
+    const issue = infos(ast)[0];
+    expect(source.slice(issue.start, issue.end)).toBe('Shiled');
+  });
+});

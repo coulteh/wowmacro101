@@ -79,6 +79,13 @@ The same principle governs severity: unrecognised spell names are **info**, flav
 mismatches are **warnings**, and only genuine syntax faults are **errors**. A spell
 missing from the dataset must never be an error — the data always lags a patch.
 
+A `ConditionalDef` has two levers for checking its values, and the difference is that
+rule, not a detail. `strictValues` warns, and is only for a closed enum (`[actionbar:N]`,
+`[mod:shift]`). `softValues(flavour)` reports at **info**, for a list we believe is
+mostly right but cannot promise is complete — `[equipped:X]` also takes inventory slot
+names that exist only as Lua globals, so a value we do not recognise may still be a
+working macro. Reach for `softValues` whenever the list could be incomplete.
+
 Unranked resolution is the one place we answer a question the data cannot: `/cast Fireball`
 with no rank casts *the highest rank you know*, and we do not model level, so
 `SpellIndex.lookup` falls back to the highest rank present. That is the right answer for a
@@ -103,6 +110,23 @@ builds carry a Death Knight bit in their `ClassMask` despite vanilla having no D
 Knights; `SpellShapeshift.StanceBarOrder` maps directly on Retail but is offset by one on
 the Classic lines. Retail Warrior stances are deliberately left *unnamed* because the
 data contradicts the well-known order.
+
+`src/data/items.ts` is the same story for the item types `[equipped:X]` can name, and the
+one place a *name* table proved as untrustworthy as an index. Only `ClassID` 2 (Weapon)
+and 4 (Armor) can be equipped, and `ItemSubClass` carries two addressable name columns —
+`DisplayName_lang` singular (`Bow`), `VerboseName_lang` plural or qualified (`Bows`,
+`One-Handed Swords`) — so both are accepted. Several subclasses exist in name only, so
+every value was corroborated against real rows in `Item.db2` and their names in
+`ItemSearchName`: Forever's "Warglaives" are two NPC display models, "Spears" are two test
+items, and the "Exotics" are a dead slot. The exclusions are listed with their reasons at
+the top of the file. An algorithmic filter was tried and was worse — gating on presence in
+`ItemSearchName` also removed Librams, Idols and Totems, which are real, because Era's
+export covers only 13k of its 25k items.
+
+Inventory slot names (`Ranged`, `Trinket`, `Two-Hand`) are the exception twice over: they
+are the client's Lua `INVTYPE_*` globals with **no DB2 to read them from**, so they are
+the one list here corroborated from a single source — which is exactly why an unrecognised
+`[equipped:]` value is info and never a warning.
 
 **If you cannot corroborate a mapping from two sources, leave it as a number.** A wrong
 index is worse than an unlabelled one.
